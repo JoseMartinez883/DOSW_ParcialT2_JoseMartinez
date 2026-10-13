@@ -25,9 +25,9 @@ Servicio backend base desarrollado con Spring Boot 3 y persistencia en MongoDB p
 
 ## 3. Despliegue
 
-- **URL del servicio en Azure:** https://dosw-parcial-josemartinez.azurewebsites.net
-- **URL del health:** https://dosw-parcial-josemartinez.azurewebsites.net/api/v1/health
-- **URL de Swagger:** https://dosw-parcial-josemartinez.azurewebsites.net/swagger-ui/index.html
+- **URL del servicio en Azure:** https://dosw-parcial-josemartinez-f4hwgudtgwcqgdb8.westus3-01.azurewebsites.net
+- **URL del health:** https://dosw-parcial-josemartinez-f4hwgudtgwcqgdb8.westus3-01.azurewebsites.net/api/v1/health
+- **URL de Swagger:** https://dosw-parcial-josemartinez-f4hwgudtgwcqgdb8.westus3-01.azurewebsites.net/swagger-ui/index.html
 
 ### Evidencia de endpoint de salud (`/api/v1/health`)
 
@@ -191,7 +191,10 @@ docker run -p 8080:8080 -e JWT_SECRET=bXlfc3VwZXJfc2VjcmV0X2tleV9mb3Jfand0X3ZhbG
 ## 10. CI/CD
 
 El pipeline realiza build, testing, creación de imagen Docker, publicación en Docker Hub y despliegue a Azure Web App.
-[Captura del workflow en verde aquí]
+
+### Evidencia de pipeline en verde en GitHub Actions
+![Pipeline CI/CD en verde](docs/images/WorksFlowsEvidence.png)
+
 Secrets usados: `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`, `AZURE_CREDENTIALS`, `AZURE_WEBAPP_NAME`, `JWT_SECRET`
 
 ## 11. Herramientas de modelado y diseño (evidencias)
