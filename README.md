@@ -206,3 +206,47 @@ Secrets usados: `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`, `AZURE_CREDENTIALS`, `A
 ### Cuenta en herramienta de diseño de interfaces (Figma)
 
 ![Evidencia Figma](docs/images/FigmaEvidence.png)
+
+
+### Asignación del equipo de Arquitectura - Distribución de las responsabilidades: 
+
+#### Diagrama de componentes general
+
+![ComponentsGeneral.png](docs%2Fimages%2FComponentsGeneral.png)
+
+
+#### Diagrama de componentes específico siguiendo el esquema de MVC. 
+
+
+#### Diagrama de clases
+
+
+### Preguntas para la revisión con Arquitectura: 
+
+#### ¿Qué problemas aparecen cuando no se separan correctamente las capas? Presenten un ejemplo del caso y expliquen cómo distribuyen sus responsabilidades.
+Pueden llegar a surgir multiples errores, desde codigo repetido (metodos, funcionalidad, responsabilidades), mal flujo de solicitudes, conversion de datos, problemas con los modelos, el flujo de os test tambien se podria ver afectado ya que al implementar un test digamos para un DTO, se debe haber un flujo con las clases de los mappers y al no tener una buena organizacion, el test se vería afectado
+
+#### ¿Qué diferencia existe entre un validador, una utilidad y un servicio? Ubiquen un ejemplo de cada uno en su diseño e indiquen su responsabilidad.
+
+### Validador
+Es una clase que verifica el proposito de la aplicacion (funcionalidad) y esos se ven representados a partir de (Request DTOs, entidades, etc.). En donde se implementan las anotaciones (@NotNull, @Email, @Size, etc.), se realiza a partir de la inserccion de datos, en donde se cumpla los inputs, con ciertos requerimientos com el correo, o la contraseña con ciertos caracteres
+
+### Utilidad
+Son clases, adicionales que complementan las clases de modelo, siendo estas genericas pero utiles como una interfaz, No manejan persistencia, ni lógica de negocio compleja. implementadfas como delegacion de responsabilidad Son estáticas, no necesitan inyección de dependencias. 
+En nuestro caso, seria un ejemplo seria para poder validar que el correo contenga el dominio de "@gmail"
+
+### Servicio
+Son clases que contiene reglas complementando la logica de negocio, representado con @service
+En nuestro caso, un ejemplo seria serviceTurno, con el fin de validar que e
+
+
+#### ¿Qué diferencia existe entre el Mapper IN y el Mapper OUT? Indiquen dónde se ubican y qué representaciones transforman cada uno.
+convierte lo que entra al Service, ya sea un RequestDTO del Controller o un Modelo que llega del Repository.
+
+convierte lo que sale del Service hacia un ResponseDTO para el Controller, o hacia un Modelo para persistir en BD.
+
+El Mapper In interactua entre el controller y el service
+El Mapper out interactua entre el service y el repository
+
+#### Retomen las tres reglas clasificadas en el paso anterior: ¿en qué componente debe ejecutarse cada una y por qué? 
+
