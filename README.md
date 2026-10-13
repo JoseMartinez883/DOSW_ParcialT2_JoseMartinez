@@ -207,9 +207,24 @@ Secrets usados: `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`, `AZURE_CREDENTIALS`, `A
 
 ![Evidencia Figma](docs/images/FigmaEvidence.png)
 
-
-
-
 ---
 
-### Desarrollo P1
+# Fase de diseño — Parte Teórica De los requerimientos a una solución implementable
+
+## Asignación del equipo de Producto - Definición del contrato de la API:
+
+[Definición del contrato de la API.xlsx](docs%2Fexcel%2FDefinici%F3n%20del%20contrato%20de%20la%20API.xlsx)
+
+## ¿Cuál es la diferencia entre una validación de entrada y una validación de negocio? Seleccionen tres reglas del caso, incluyendo al menos una de cada tipo, y justifiquen su clasificación.
+
+Son formas de verificacion divididas en FrontEnd (UI) y Backend, siendo estos implementaciones a partir de la inserccion o solicitudes tomandas desde el controlador y convertidas por los mappers, luego en el ambito de la logica de negocio comprobar que la solicitud es valida o exista, por ejemplo:
+cuando el usuario quiere registrarse con un correo con un correo institucional, se envia la solicitud (inserccion de datos) a partir de los DTOS, para que luego la logica del negocio del servicio verifique que tipo de solicitud es, y si es valida cumplienod con los caracteres especiales de la contraseña que use( verificacion en UI/input/DTO) al agregar los datos se verifica el correo que tenga "@", que la contraseña cumpla con ciertos caracteres tec.., luego de ello se verifica que los datos se cumplan segun su funcionalidad y proposito de la aplicacion atravez de los servicios (que sea un correo educativo)
+
+### Reglas del caso
+
+1. Cuando creamos un turno la regla de negocio es que el barbero debe existir y estar disponible, es una regla a nivel de negocio, ya que debemos verificar la dispnobilidad del barbero antes de crear el turno
+2. Por otro lado, una regla de validacion, seria que el usuario cuando creara el turno, las fechas deben ser mayores o iguales a las actuales, ya que no tendria sentido en ningun caso, crear un turno en una fecha y hora pasada
+3. Por otro lado, cuando iniciamos sesion, una regla de validacion seria que la contraseña y el correo no deben ser nulos, ya que no se podria iniciar sesion
+
+## En Pedir un turno, ¿cómo debe responder la API si fallan varias condiciones? Expliquen qué error se informa y qué cambios deben evitarse. 
+
