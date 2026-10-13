@@ -206,3 +206,10 @@ Secrets usados: `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`, `AZURE_CREDENTIALS`, `A
 ### Cuenta en herramienta de diseño de interfaces (Figma)
 
 ![Evidencia Figma](docs/images/FigmaEvidence.png)
+
+
+
+
+---
+
+### Desarrollo P1
