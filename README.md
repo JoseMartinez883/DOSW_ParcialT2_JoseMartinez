@@ -213,9 +213,10 @@ Secrets usados: `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`, `AZURE_CREDENTIALS`, `A
 
 ## Asignación del equipo de Producto - Definición del contrato de la API:
 
+Excel Tabla:
 [Definición del contrato de la API.xlsx](docs%2Fexcel%2FDefinici%F3n%20del%20contrato%20de%20la%20API.xlsx)
 
-## ¿Cuál es la diferencia entre una validación de entrada y una validación de negocio? Seleccionen tres reglas del caso, incluyendo al menos una de cada tipo, y justifiquen su clasificación.
+### ¿Cuál es la diferencia entre una validación de entrada y una validación de negocio? Seleccionen tres reglas del caso, incluyendo al menos una de cada tipo, y justifiquen su clasificación.
 
 Son formas de verificacion divididas en FrontEnd (UI) y Backend, siendo estos implementaciones a partir de la inserccion o solicitudes tomandas desde el controlador y convertidas por los mappers, luego en el ambito de la logica de negocio comprobar que la solicitud es valida o exista, por ejemplo:
 cuando el usuario quiere registrarse con un correo con un correo institucional, se envia la solicitud (inserccion de datos) a partir de los DTOS, para que luego la logica del negocio del servicio verifique que tipo de solicitud es, y si es valida cumplienod con los caracteres especiales de la contraseña que use( verificacion en UI/input/DTO) al agregar los datos se verifica el correo que tenga "@", que la contraseña cumpla con ciertos caracteres tec.., luego de ello se verifica que los datos se cumplan segun su funcionalidad y proposito de la aplicacion atravez de los servicios (que sea un correo educativo)
@@ -226,5 +227,9 @@ cuando el usuario quiere registrarse con un correo con un correo institucional, 
 2. Por otro lado, una regla de validacion, seria que el usuario cuando creara el turno, las fechas deben ser mayores o iguales a las actuales, ya que no tendria sentido en ningun caso, crear un turno en una fecha y hora pasada
 3. Por otro lado, cuando iniciamos sesion, una regla de validacion seria que la contraseña y el correo no deben ser nulos, ya que no se podria iniciar sesion
 
-## En Pedir un turno, ¿cómo debe responder la API si fallan varias condiciones? Expliquen qué error se informa y qué cambios deben evitarse. 
+---
+### En Pedir un turno, ¿cómo debe responder la API si fallan varias condiciones? Expliquen qué error se informa y qué cambios deben evitarse. 
 
+En Pedir un turno, si fallan varias condiciones, la API evalúa la Cadena de Validaciones en el orden estricto en el que fue definida y se detiene inmediatamente en la primera falla encontrada.   
+Para el error informado: Se retorna únicamente el motivo específico de ese primer rechazo, acompañado del código de estado HTTP  definido en la matriz de errores por ejemplo, un 409 Conflict si la franja está llena. No se continúan evaluando las demás condiciones ni se acumulan los errores.   
+Los cambios a evitar serian que el proceso se debe abortar inmediatamente garantizando que no se cree ningún registro de reserva en la base de datos y no se modifique el estado del turno. Manteniendo la consistencia de la información.   
