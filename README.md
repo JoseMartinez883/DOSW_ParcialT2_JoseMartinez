@@ -578,8 +578,8 @@ Para finalizar la etapa de diseño, su líder le asigna una reunión con el equi
 
 * **Fuente editable en Draw.io:** https://drive.google.com/file/d/1sYDKYtZpFOvCa8y8ybALDk5QuHJG-ikW/view?usp=sharing
 * **Vista del diagrama exportado:**
+[diagrama_despliegue.drawio](docs/images/diagrama_despliegue.drawio)
 
-![img.png](docs/images/diagramaDrawio.png)
 
 #### 2. Especificación técnica del despliegue
 
