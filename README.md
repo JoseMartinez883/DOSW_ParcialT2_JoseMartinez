@@ -260,130 +260,6 @@ La diferencia principal está en qué revisa cada una y en qué capa se ejecuta:
 
 ---
 
-## Asignación del equipo de Arquitectura - Distribución de las responsabilidades:
-
-### Diagrama de componentes general
-
-![Diagrama de componentes general](docs/uml/DiagramaComponentesGeneral.png)
-
-* **Descripción breve:**
-  Representa la arquitectura de alto nivel del sistema para Bob's Barber, evidenciando un modelo cliente-servidor desacoplado compuesto por tres componentes principales: el Front-End (aplicación cliente/SPA encargada de la interfaz gráfica y experiencia de usuario), el Back-End (API REST desarrollada con Spring Boot que encapsula la lógica de negocio, reglas de reserva y servicios) y el subsistema de persistencia de datos (Base de datos NoSQL MongoDB).
-* **Justificación técnica:**
-  * **Desacoplamiento estructural y separación de responsabilidades (SoC):** El Front-End no interactúa ni tiene acceso directo a la base de datos; delega todas las operaciones y consultas a la API Back-End a través de interfaces REST provistas/requeridas (notación Lollipop & Socket).
-  * **Protocolo y contrato sin estado (Stateless):** La comunicación se realiza mediante HTTP/HTTPS con intercambio de mensajes en formato JSON y autenticación basada en tokens JWT, garantizando que el Back-End pueda escalar horizontalmente de forma independiente a la interfaz de usuario.
-  * **Seguridad y persistencia centralizada:** El Back-End es el único componente autorizado para establecer conexión con el clúster de MongoDB, aislando las credenciales, conexiones y reglas de consistencia de datos de cara al exterior.
-
-### Diagrama de componentes específico siguiendo el esquema de MVC.
-
-![Diagrama de componentes específico siguiendo el esquema de MVC](docs/uml/DiagramaComponentesEspecificos.png)
-
-#### Vistas de detalle para mayor visibilidad y legibilidad:
-
-* **Detalle Capa Controller, Capa Mapper IN y Capa Service:**
-  ![Detalle Controladores y Servicios](docs/uml/DiagramComponentsPart01.png)
-
-* **Detalle Capa Mapper OUT, Capa Repository, Capa Validator y Configuración:**
-  ![Detalle Mappers, Repositorios, Validadores y Configuración](docs/uml/DiagramComponentsPart02.png)
-
-* **Descripción breve:**
-  Descompone internamente la arquitectura del Back-End en capas lógicas estrictas basadas en el patrón Modelo-Vista-Controlador (MVC) extendido para APIs REST. Se organizan los componentes en: Capa Controller (adaptadores REST y manejador global de excepciones), Capa Mapper IN (transformación de DTOs de entrada al dominio), Capa Service (orquestación de casos de uso del negocio), Capa Validator (evaluación de reglas de negocio con corte inmediato), Capa Mapper OUT (transformación de dominio a entidades de persistencia y DTOs de salida), Capa Repository (acceso y consultas sobre MongoDB con Spring Data) y el módulo transversal Config & Util (seguridad JWT/RBAC, documentación OpenAPI/Swagger, utilidades de fecha y data seeding).
-* **Justificación técnica:**
-  * **Controladores ligeros y desacoplados:** Los controladores (`AuthController`, `TurnoController`, `ReservaController`, etc.) actúan únicamente como puntos de entrada HTTP, delegando el procesamiento sin contener reglas de negocio ni acceso a datos, garantizando alta cohesión y bajo acoplamiento.
-  * **Aislamiento perimetral mediante Mappers (In/Out):** Se evita el antipatrón de exponer entidades de persistencia directamente al cliente. `Mapper IN` convierte las peticiones externas (`Request DTO`) en objetos de negocio limpios; `Mapper OUT` transforma entidades de dominio a entidades de base de datos (`*Entity`) o respuestas hacia el cliente (`Response DTO`), permitiendo cambiar la estructura de la base de datos o de los endpoints sin afectar la lógica interna.
-  * **Capa Service como orquestador del caso de uso:** Concentra la lógica del negocio (ej. coordinación del flujo de reserva, sumatoria de precios de servicios y transiciones de estado) e inyecta sus dependencias (validadores, repositorios y utilidades) por constructor mediante inversión de control (IoC).
-  * **Capa Validator con estrategia Fail-Fast:** Aísla las reglas de negocio complejas (aforo de franjas $\le 3$, compatibilidad de especialidades y datos del cliente) del flujo del servicio. Al estructurarse de forma modular y secuencial, si una validación falla, el flujo se detiene inmediatamente y arroja la excepción correspondiente, evitando escrituras parciales o inconsistentes en la base de datos.
-  * **Manejo uniforme de errores transversales:** Se incluye `GlobalExceptionHandler` (`@RestControllerAdvice`) para interceptar excepciones de negocio y de validación en un único punto, garantizando respuestas estandarizadas con códigos HTTP semánticos (400, 401, 403, 404, 409, 422).
-
-### Diagrama de clases
-
-![Diagrama de clases - Modelos de Dominio](docs/uml/DiagramaDeClases.png)
-
-#### Vistas de detalle para mayor visibilidad y legibilidad:
-
-* **Detalle Entidades de Dominio, Objetos de Valor y Enums:**
-  ![Detalle Entidades de Dominio](docs/uml/DiagramClassPart01.png)
-
-* **Detalle Patrones de Diseño (Chain of Responsibility, Strategy y Builder):**
-  ![Detalle Patrones de Diseño](docs/uml/DiagramClassPart02.png)
-
-* **Descripción breve:**
-  Modela la estructura del dominio del problema para Bob's Barber aplicando Programación Orientada a Objetos (POO) y Principios SOLID. Identifica las entidades principales del negocio (`Usuario`, `Reserva`, `Turno`, `Barbero`, `Servicio`), sus objetos de valor y enumeraciones (`RolUsuario`, `EstadoReserva`, `EstadoTurno`, `HorarioDisponibilidad`, `Especialidad`), e incorpora tres patrones de diseño de software GoF: *Chain of Responsibility* para la cadena secuencial de validaciones, *Strategy* para la asignación dinámica de barberos según especialidad y disponibilidad, y *Builder* para la construcción robusta e inmutable de reservas complejas.
-* **Justificación técnica:**
-  * **Separación entre Entidades con ciclo de vida y Objetos de Valor:** Entidades como `Turno` y `Reserva` gestionan su propia identidad y transiciones de estado mediante métodos encapsulados (`ocupar()`, `liberar()`, `confirmar()`, `cancelar()`, `calcularTotal()`). `HorarioDisponibilidad` actúa como un Value Object inmutable que encapsula la lógica temporal (`incluye(dia, hora)`), desacoplando los días y rangos horarios del barbero.
-  * **Patrón Chain of Responsibility (Cadena de Responsabilidad):** Utilizado para implementar la cadena de 5 validaciones requerida por el caso de estudio (Disponibilidad de franja, Catálogo de servicios, Especialidad del barbero, Datos del cliente). A través de la clase base abstracta `AbstractValidadorReservaHandler` y sus handlers concretos, cada validador ejecuta su verificación y, en caso exitoso, delega al siguiente handler (`checkNext()`). Si una condición no se cumple, interrumpe el flujo (*fail-fast*) y lanza el error correspondiente sin acoplar los validadores entre sí ni sobrecargar el servicio de reservas.
-  * **Patrón Strategy (Estrategia):** Permite resolver el requerimiento de negocio donde un cliente solicita un turno sin preferencia de barbero y el sistema debe asignar automáticamente uno disponible con la especialidad requerida. La interfaz `AsignacionBarberoStrategy` abstrae la regla de selección, y la clase `AsignacionPorEspecialidadStrategy` implementa la búsqueda y filtrado de barberos libres, facilitando la incorporación de nuevas estrategias en el futuro (ej. balanceo de carga o calificación) sin alterar el dominio.
-  * **Patrón Builder (Constructor):** Dado que la creación de una `Reserva` involucra múltiples asociaciones obligatorias (identificador de turno, cliente, barbero asignado y lista de servicios), `ReservaBuilder` garantiza la creación segura y consistente del objeto, validando invariantes antes de su construcción y evitando constructores telescópicos.
-
-### Preguntas para la revisión con Arquitectura:
-
-#### ¿Qué problemas aparecen cuando no se separan correctamente las capas? Presenten un ejemplo del caso y expliquen cómo distribuyen sus responsabilidades.
-
-Pueden llegar a surgir múltiples problemas de diseño y mantenimiento: código repetido (métodos y responsabilidades duplicadas en varios puntos), un mal flujo en el manejo de las solicitudes, confusiones en la conversión de datos y problemas con los modelos al acoplar la base de datos con la capa web. Además, el flujo de las pruebas unitarias se vería gravemente afectado, ya que al querer probar un DTO o una regla de negocio aislada, si no existe una separación limpia mediante mappers y servicios, el test obligaría a depender de la base de datos o de peticiones completas.
-
-Ejemplo del caso Bob's Barber (Pedir un turno): Si el `TurnoController` recibiera la solicitud y en lugar de delegar se pusiera a consultar directamente a MongoDB para contar si ya hay 3 reservas en la franja, calculara la suma de los servicios y guardara la reserva en la base de datos:
-
-* El controlador tendría demasiadas responsabilidades y violaría el principio de responsabilidad única.
-* Si el día de mañana se cambia MongoDB o la regla de aforo cambia, tocaría modificar directamente el controlador web en lugar de un servicio.
-
-**Distribución correcta de responsabilidades:**
-
-1. **Controller (`TurnoController`):** Solo recibe la petición HTTP, valida el formato del JSON entrante (Bean Validation) y llama al servicio.
-2. **Service (`TurnoServiceImpl`):** Orquesta el flujo del caso de uso, invoca a los validadores de negocio, calcula el precio total y coordina la persistencia.
-3. **Validator (`ReservaValidatorImpl`):** Verifica las reglas del negocio de la barbería (aforo $\le 3$, especialidad del barbero `E02`).
-4. **Repository (`TurnoRepository`, `ReservaRepository`):** Se encarga exclusivamente de las consultas y operaciones con MongoDB.
-
-#### ¿Qué diferencia existe entre un validador, una utilidad y un servicio? Ubiquen un ejemplo de cada uno en su diseño e indiquen su responsabilidad.
-
-* **Servicio (`TurnoServiceImpl`):**
-
-  * *Responsabilidad:* Se encarga de todo el flujo de negocio, coordina las validaciones, calcula operaciones (como la suma total de los precios de los servicios) y le pide a los repositorios que guarden la información. Es un componente administrado por Spring (`@Service`) e inyecta dependencias por constructor.
-* **Validador (`ReservaValidatorImpl`):**
-
-  * *Responsabilidad:* Es una clase especializada cuya única función es evaluar si se cumplen las reglas del negocio antes de ejecutar una acción, aplicando el principio de falla rapida, es decir, el primero que falle, como una cadena de responsabilidad, al fallar uno, se para la cadena.
-  * *Ejemplo en el diseño:* `ReservaValidatorImpl` (o la cadena de validadores), que revisa que el barbero libre en la franja realmente tenga la especialidad requerida para el corte (`E02`) y que la franja no supere los 3 turnos ocupados (`E01`).
-* **Utilidad (`DateUtil` o `JwtUtil`):**
-
-  * *Responsabilidad:* Son métodos auxiliares, genéricos y reutilizables que realizan cálculos o transformaciones puras sin guardar estado ni depender de la base de datos. Suelen tener métodos estáticos o sin dependencias de dominio complejas.
-  * *Ejemplo en el diseño:* `DateUtil`, que toma una hora de inicio y calcula la franja exacta de una hora, o verifica si una fecha corresponde a un día laboral del barbero (ej. lunes a jueves para Miguel).
-
-#### ¿Qué diferencia existe entre el Mapper IN y el Mapper OUT? Indiquen dónde se ubican y qué representaciones transforman cada uno.
-
-La diferencia radica en **en qué frontera de la arquitectura se ubican y qué modelos traducen**:
-
-* **Mapper IN (`TurnoDTOMapper` / `AuthDTOMapper`):**
-
-  * *Ubicación:* En la **Capa Controller** (`edu.dosw.parcial.controller.mappers`).
-  * *Transformación:* Traduce entre los objetos de transferencia de la web y el dominio:
-    * **Entrada:** `Request DTO` (JSON que envía el cliente) ➔ `Modelo de Dominio`.
-    * **Salida:** `Modelo de Dominio` ➔ `Response DTO` (JSON que recibe el cliente).
-  * *Propósito:* Aísla a la capa de Servicio para que no tenga idea de cómo viajan los datos en HTTP.
-* **Mapper OUT (`TurnoEntityMapper` / `ReservaEntityMapper`):**
-
-  * *Ubicación:* En la **Capa de Persistencia** (`edu.dosw.parcial.persistence.mappers`).
-  * *Transformación:* Traduce entre el dominio y los documentos de MongoDB:
-    * `Modelo de Dominio` ➔ `Documento MongoDB (@Document)` (para guardar en BD).
-    * `Documento MongoDB` ➔ `Modelo de Dominio` (al consultar de la BD para entregárselo al servicio).
-  * *Propósito:* Aísla a la capa de Servicio para que no dependa de las anotaciones ni estructuras de la base de datos NoSQL.
-
-#### Retomen las tres reglas clasificadas en el paso anterior: ¿en qué componente debe ejecutarse cada una y por qué?
-
-Retomando las tres reglas seleccionadas en la revisión de Producto:
-
-1. **Formato y dominio del correo (`E08 - Correo inválido`):**
-
-   * *Componente:* Se ejecuta en el **Request DTO / Controller** (`CreateReservaRequest` o `LoginRequest`).
-   * *Por qué:* Es una validación de entrada puramente sintáctica. Se resuelve inmediatamente con la anotación `@Pattern` de Bean Validation apenas llega el JSON, evitando gastar recursos del servidor o llegar a la capa de servicios si el correo no termina en `@gmail.com`.
-2. **Longitud numérica del teléfono (`E07 - Teléfono inválido`):**
-
-   * *Componente:* Se ejecuta en el **Request DTO / Controller** (`CreateReservaRequest`).
-   * *Por qué:* Al igual que el correo, es una validación de formato estructural. El controlador la rechaza de inmediato con un `400 Bad Request` usando `@Pattern(regexp = "^[0-9]{10}$")` antes de que la petición toque el dominio.
-3. **Compatibilidad de especialidad del barbero (`E02 - Especialidad incompatible`):**
-
-   * *Componente:* Se ejecuta en la **Capa Core / Validator** (`ReservaValidatorImpl` o `BarberoEspecialidadValidator`).
-   * *Por qué:* Es una regla de negocio semántica. No se puede saber si el barbero es apto solo mirando el JSON de entrada, el componente necesita consultar al barbero en la base de datos (MongoDB), extraer su lista de especialidades y verificar si incluye la especialidad requerida por el servicio (por ejemplo, que Laura tenga `CAPILAR` o que Miguel tenga `CORTE CON BARBA`).
-
----
-
 ## Punto 4
 Asignación del Equipo de Seguridad - Proteger el acceso y la información:
 
@@ -540,41 +416,10 @@ Para finalizar la etapa de diseño, su líder le asigna una reunión con el equi
 
 #### 1. Diagrama de despliegue de la solución
 
-```mermaid
-flowchart TD
-    subgraph ClientDevice ["Dispositivo Cliente - Navegador o App Web"]
-        FrontendApp["Artefacto: SPA Web / Consumidor HTTP"]
-    end
+* **Fuente editable en Draw.io:** [diagrama_despliegue.drawio](docs/uml/diagrama_despliegue.drawio)
+* **Vista del diagrama exportado:**
 
-    subgraph GitHubEnv ["Plataforma GitHub - CI/CD"]
-        Workflow["Pipeline: ci-cd.yml"]
-        Runner["Runner: Ubuntu Latest"]
-    end
-
-    subgraph DockerRegistry ["Docker Hub - Registro de Contenedores"]
-        DockerImage["Imagen: josemartinez883/dosw-parcial-t2:latest"]
-    end
-
-    subgraph CloudAzure ["Microsoft Azure - App Service"]
-        subgraph AppServiceNode ["Nodo de Ejecución: Azure Web App - Linux"]
-            DockerContainer["Contenedor Docker: Spring Boot 3 - JDK 21"]
-            AppArtifact["Artefacto: dosw-parcial.jar"]
-        end
-    end
-
-    subgraph CloudMongo ["MongoDB Atlas - Clúster en la Nube"]
-        subgraph MongoNode ["Nodo de Base de Datos: Replica Set"]
-            Database["Colecciones: reservas, turnos, barberos, usuarios"]
-        end
-    end
-
-    FrontendApp -->|"HTTPS / REST en puerto 443 a 8080"| DockerContainer
-    Runner -->|"Git push a main o develop"| Workflow
-    Workflow -->|"Docker login, build y push"| DockerImage
-    Workflow -->|"Deploy webhook y credenciales Azure"| AppServiceNode
-    DockerContainer -->|"Pull de imagen latest"| DockerImage
-    DockerContainer -->|"MongoDB Wire Protocol con TLS puerto 27017"| Database
-```
+![Diagrama de Despliegue](docs/images/diagrama_despliegue.png)
 
 #### 2. Especificación técnica del despliegue
 
@@ -662,4 +507,4 @@ La diferencia radica en el público objetivo y en la seguridad de la informació
 Nunca se debe exponer el error técnico interno al cliente porque revelar nombres de tecnologías, versiones de librerías o estructuras de base de datos le da pistas valiosas a atacantes para encontrar vulnerabilidades en el sistema.
 
 
-
+
