@@ -214,28 +214,52 @@ Secrets usados: `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`, `AZURE_CREDENTIALS`, `A
 ## Asignación del equipo de Producto - Definición del contrato de la API:
 
 Excel Tabla:
-[Definición del contrato de la API.xlsx](docs%2Fexcel%2FDefinici%F3n%20del%20contrato%20de%20la%20API.xlsx)
+[Definición del contrato de la API.xlsx](docs/excel/Definici%C3%B3n%20del%20contrato%20de%20la%20API.xlsx)
+
+preview:
+![img.png](docs/images/previewExcel.png)
 
 ### ¿Cuál es la diferencia entre una validación de entrada y una validación de negocio? Seleccionen tres reglas del caso, incluyendo al menos una de cada tipo, y justifiquen su clasificación.
 
-Son formas de verificacion divididas en FrontEnd (UI) y Backend, siendo estos implementaciones a partir de la inserccion o solicitudes tomandas desde el controlador y convertidas por los mappers, luego en el ambito de la logica de negocio comprobar que la solicitud es valida o exista, por ejemplo:
-cuando el usuario quiere registrarse con un correo con un correo institucional, se envia la solicitud (inserccion de datos) a partir de los DTOS, para que luego la logica del negocio del servicio verifique que tipo de solicitud es, y si es valida cumplienod con los caracteres especiales de la contraseña que use( verificacion en UI/input/DTO) al agregar los datos se verifica el correo que tenga "@", que la contraseña cumpla con ciertos caracteres tec.., luego de ello se verifica que los datos se cumplan segun su funcionalidad y proposito de la aplicacion atravez de los servicios (que sea un correo educativo)
+La diferencia principal está en **qué revisa cada una y en qué parte de la aplicación se ejecuta**:
 
-### Reglas del caso
+* **Validación de entrada:** Revisa únicamente el formato, tipo y que esten los datos que el cliente. Se hace apenas llega la petición en el controlador (usando DTOs y anotaciones como `@NotNull`, `@Pattern`, etc.). Su ventaja es que es rápida y no necesita conectarse a la base de datos ni consultar nada del sistema, si los datos vienen mal escritos o incompletos, se rechazan de una vez con un error `400 Bad Request`.
 
-1. Cuando creamos un turno la regla de negocio es que el barbero debe existir y estar disponible, es una regla a nivel de negocio, ya que debemos verificar la dispnobilidad del barbero antes de crear el turno
-2. Por otro lado, una regla de validacion, seria que el usuario cuando creara el turno, las fechas deben ser mayores o iguales a las actuales, ya que no tendria sentido en ningun caso, crear un turno en una fecha y hora pasada
-3. Por otro lado, cuando iniciamos sesion, una regla de validacion seria que la contraseña y el correo no deben ser nulos, ya que no se podria iniciar sesion
+* **Validación de negocio:** Revisa que la solicitud tenga sentido y cumpla con las reglas de negocios de la barbería (esto en nuetro caso del parcial). Esta validación se hace en los servicios (en la lógica del negocio) y sí necesita consultar la base de datos (MongoDB). Por ejemplo, verifica si un barbero realmente trabaja a esa hora, si tiene la especialidad requerida o si ya se llenó el cupo de la hora. Si falla, devuelve errores como `404 Not Found`, `409 Conflict` o `422 Unprocessable Entity`.
+
+#### Tres reglas del caso Bob's Barber justificadas:
+
+1. **Validación del correo del cliente (`E08 - Correo inválido`):**
+   * *Regla:* El correo no puede ser nulo, debe tener formato de email y su dominio tiene que ser obligatoriamente `@gmail.com`.
+   * *Justificación:* Es de **entrada**, porque se valida directamente en el DTO con una expresión regular apenas llega el JSON. No necesitamos consultar MongoDB para saber si el texto termina en `@gmail.com` o no.
+
+2. **Validación del teléfono del cliente (`E07 - Teléfono inválido`):**
+   * *Regla:* El teléfono no puede ser nulo y debe tener exactamente 10 dígitos numéricos.
+   * *Justificación:* Es de **entrada**, porque solo revisa la longitud y el tipo de dato que el usuario escribió en la petición, antes de pasar a cualquier otra lógica.
+
+3. **Compatibilidad de especialidad del barbero (`E02 - Especialidad incompatible`):**
+   * *Regla:* El barbero asignado debe saber hacer el servicio que el cliente pidió (por ejemplo, si pide `SER-002` Corte + barba, el barbero debe tener la especialidad `CORTE CON BARBA`).
+   * *Justificación:* Es de **negocio**, porque con solo ver el JSON de la petición no sabemos qué sabe hacer el barbero. El servicio tiene que ir a la base de datos, buscar al barbero, revisar su lista de especialidades y compararla con el servicio solicitado.
 
 ---
-### En Pedir un turno, ¿cómo debe responder la API si fallan varias condiciones? Expliquen qué error se informa y qué cambios deben evitarse. 
 
-En Pedir un turno, si fallan varias condiciones, la API evalúa la Cadena de Validaciones en el orden estricto en el que fue definida y se detiene inmediatamente en la primera falla encontrada.   
-Para el error informado: Se retorna únicamente el motivo específico de ese primer rechazo, acompañado del código de estado HTTP  definido en la matriz de errores por ejemplo, un 409 Conflict si la franja está llena. No se continúan evaluando las demás condiciones ni se acumulan los errores.
-Los cambios a evitar serian que el proceso se debe abortar inmediatamente garantizando que no se cree ningún registro de reserva en la base de datos y no se modifique el estado del turno. Manteniendo la consistencia de la información.   
+### En Pedir un turno, ¿cómo debe responder la API si fallan varias condiciones? Expliquen qué error se informa y qué cambios deben evitarse.
 
+* **Cómo responde la API:**  
+  La API sigue la cadena de validaciones en orden estricto (1. Franja disponible, 2. Barbero disponible con especialidad, 3. Datos del cliente, 4. Servicio permitido). Si se encuentran varias fallas en la misma petición, la API se detiene inmediatamente en la primera que falle.
+
+* **Qué error se informa:**  
+  Se informa **únicamente el motivo de la primera falla que ocurrió**, con su código HTTP correspondiente. Por ejemplo, si la franja ya estaba llena (`E01`), se responde inmediatamente un `409 Conflict` indicando que la franja está llena. La API no sigue revisando las demás condiciones ni devuelve una lista acumulada de errores.
+
+* **Qué cambios deben evitarse:**  
+  Al fallar cualquier validación, el proceso se cancela de inmediato y no debe haber ningún cambio en la base de datos:
+  * **No se debe crear la reserva:** No se puede guardar ningún registro nuevo en la colección de reservas.
+  * **No se debe modificar el turno:** El turno debe quedarse en estado `DISPONIBLE` y no pasar a `OCUPADO`. Esto ya que el turno que el cliente solicito, no se reservo, es decir el turno sigue 
+  'DISPONIBLE'. Aunque, tambien se puede presentar el caso que el turno no este DISPONIBLE, en ese caso la reserva no se crearia. 
+  * La base de datos debe quedar exactamente igual que antes de que llegara la petición.  
 
 ---
+
 ## Punto 4
 Asignación del Equipo de Seguridad - Proteger el acceso y la información:
 
