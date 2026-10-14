@@ -403,4 +403,139 @@ No. Las pruebas demuestran que hay defectos cuando fallan, pero no pueden garant
   
   Por eso los tests automatizados deben complementarse con análisis estático en SonarQube, pruebas de carga y monitoreo continuo con métricas y logs en producción.
 
+---
+
+## Punto 6
+Asignación del Equipo de Devops - Definir cómo comprobar el comportamiento:
+
+Para finalizar la etapa de diseño, su líder le asigna una reunión con el equipo de Devops para garantizar que cuando se implemente el MVP pueda desplegarse correctamente, para ello debes generar el Diagrama de despliegue de la aplicación teniendo en cuenta las anotaciones correspondientes: Sus nodos, los artefactos, las relaciones con su respectivo mecanismo de comunicación, los dispositivos involucrados y la especificación del despliegue.
+
+---
+
+### Desarrollo
+
+#### 1. Diagrama de despliegue de la solución
+
+```mermaid
+flowchart TD
+    subgraph ClientDevice ["Dispositivo Cliente - Navegador o App Web"]
+        FrontendApp["Artefacto: SPA Web / Consumidor HTTP"]
+    end
+
+    subgraph GitHubEnv ["Plataforma GitHub - CI/CD"]
+        Workflow["Pipeline: ci-cd.yml"]
+        Runner["Runner: Ubuntu Latest"]
+    end
+
+    subgraph DockerRegistry ["Docker Hub - Registro de Contenedores"]
+        DockerImage["Imagen: josemartinez883/dosw-parcial-t2:latest"]
+    end
+
+    subgraph CloudAzure ["Microsoft Azure - App Service"]
+        subgraph AppServiceNode ["Nodo de Ejecución: Azure Web App - Linux"]
+            DockerContainer["Contenedor Docker: Spring Boot 3 - JDK 21"]
+            AppArtifact["Artefacto: dosw-parcial.jar"]
+        end
+    end
+
+    subgraph CloudMongo ["MongoDB Atlas - Clúster en la Nube"]
+        subgraph MongoNode ["Nodo de Base de Datos: Replica Set"]
+            Database["Colecciones: reservas, turnos, barberos, usuarios"]
+        end
+    end
+
+    FrontendApp -->|"HTTPS / REST en puerto 443 a 8080"| DockerContainer
+    Runner -->|"Git push a main o develop"| Workflow
+    Workflow -->|"Docker login, build y push"| DockerImage
+    Workflow -->|"Deploy webhook y credenciales Azure"| AppServiceNode
+    DockerContainer -->|"Pull de imagen latest"| DockerImage
+    DockerContainer -->|"MongoDB Wire Protocol con TLS puerto 27017"| Database
+```
+
+#### 2. Especificación técnica del despliegue
+
+| Elemento | Tipo | Detalle técnico | Rol en la arquitectura |
+|---|---|---|---|
+| **Dispositivo Cliente** | Dispositivo físico o lógico | Navegador web, cliente HTTP o frontend de la barbería | Emite las peticiones HTTP y consume los endpoints definidos en el contrato de la API. |
+| **Pipeline GitHub Actions** | Servidor de automatización | Runner en Ubuntu Latest con Java 21 Temurin y Docker CLI | Compila el código, ejecuta las pruebas unitarias y genera la imagen inmutable. |
+| **Docker Hub** | Registro de artefactos | Repositorio de imágenes Docker con la etiqueta latest | Almacena y distribuye la imagen de contenedor lista para ejecución. |
+| **Azure App Service** | Nodo de ejecución en la nube | Instancia Web App Linux en Microsoft Azure en puerto 8080 | Aloja y corre el contenedor Docker con la aplicación Spring Boot en producción. |
+| **MongoDB Atlas** | Nodo de base de datos en la nube | Clúster gestionado con réplica y cifrado TLS | Persiste la información de turnos, reservas, usuarios y servicios. |
+| **Mecanismos de comunicación** | Protocolos de red | HTTPS en puerto 443 mapeado a 8080 y protocolo MongoDB en puerto 27017 | Asegura tráfico cifrado tanto desde el cliente como hacia el clúster de datos. |
+
+---
+
+### Preguntas para la revisión con el equipo de Devops
+
+#### a. Etapas principales de un pipeline CI/CD y propósito de cada una
+
+* **Etapa de integración y pruebas:**  
+  Descarga el código en el runner de GitHub Actions, configura el entorno con Java 21 y ejecuta `mvn verify`. Su objetivo es compilar el proyecto y correr toda la suite de pruebas automatizadas y cobertura. Si algo falla o no compila, corta el pipeline de una vez para que ningún error llegue a etapas posteriores.
+
+* **Etapa de empaquetado y subida de imagen:**  
+  Toma el Dockerfile multietapa, construye la imagen del contenedor con el jar generado y se autentica contra Docker Hub para hacer el push de la imagen etiquetada con latest. Su propósito es generar un artefacto inmutable y portable que sea exactamente igual en pruebas y en producción.
+
+* **Etapa de despliegue continuo:**  
+  Se conecta a Microsoft Azure usando las credenciales del service principal y le ordena a Azure Web App actualizar el contenedor descargando la última versión de la imagen desde Docker Hub. Su propósito es publicar la aplicación en vivo sin intervención manual y reduciendo al mínimo el tiempo de indisponibilidad.
+
+---
+
+#### b. Qué sucede si una prueba falla y si debe permitirse el despliegue
+
+Si una prueba falla durante el paso de `mvn verify`, Maven arroja un código de salida de error y el job `test` se marca en rojo. Como los jobs de `docker` y `deploy` tienen la instrucción `needs: test`, el pipeline se cancela automáticamente en ese instante.
+
+No se debe permitir el despliegue bajo ninguna circunstancia. El objetivo principal de tener un pipeline automatizado es servir de filtro de calidad. Si permitimos desplegar con una prueba rota, estaríamos mandando a producción un bug confirmado, una regresión que rompe el contrato de la API o una falla que puede corromper datos de turnos y reservas de los usuarios reales.
+
+---
+
+#### c. Para qué sirven los logs y qué registrar ante una reserva fallida o un error de autenticación
+
+Los logs dan visibilidad en tiempo real de lo que ocurre dentro de la aplicación mientras está corriendo en Azure, permitiendo entender fallas y auditar eventos sin tener que pausar el servicio ni entrar a depurar código en vivo.
+
+* **Al investigar una reserva fallida:**  
+  Registramos en nivel `WARN` o `ERROR`:
+  - Identificador único de la petición o correlation ID para rastrear la llamada completa.
+  - Fecha y hora exacta en formato UTC.
+  - Método y ruta consumida, como `POST /api/v1/reservas`.
+  - Datos de negocio involucrados, como el ID del cliente, ID del barbero, fecha del turno y código de servicio.
+  - Motivo puntual del rechazo según la regla que falló, por ejemplo franja llena E01 o barbero sin especialidad E02.
+  - Stack trace de la excepción en caso de que la falla haya sido por caída de conexión con MongoDB.
+
+* **Al investigar un error de autenticación:**  
+  Registramos en nivel `WARN`:
+  - Fecha, hora e IP de origen de la solicitud.
+  - Correo electrónico que intentó iniciar sesión.
+  - Causa técnica del rechazo, como credenciales incorrectas, usuario inexistente en base de datos o token JWT expirado.
+
+---
+
+#### d. Ejemplos de información útil para rastrear la operación y datos que nunca deben registrarse
+
+* **Información útil que sí se registra:**  
+  - Trace ID y correlation ID para asociar todas las líneas de log de una misma petición.
+  - Tiempos de respuesta y duración de consultas pesadas a la base de datos.
+  - Códigos de respuesta HTTP y estados de dominio, como `CONFIRMADA` o `CANCELADA`.
+  - Identificadores de negocio que no sean datos sensibles, como `reservaId`, `turnoId` o `barberoId`.
+
+* **Datos sensibles que nunca deben registrarse:**  
+  - Contraseñas en texto plano ni contraseñas con hash.
+  - Tokens JWT completos con su firma en el header de autorización.
+  - Datos de tarjetas de crédito o información bancaria de pagos.
+  - Secretos de infraestructura, como la clave `JWT_SECRET` o la cadena de conexión con usuario y clave de MongoDB.
+
+---
+
+#### e. Diferencia entre el detalle del log interno y el mensaje que recibe el cliente
+
+La diferencia radica en el público objetivo y en la seguridad de la información:
+
+* **El log interno:**  
+  Está hecho para el equipo de desarrollo y soporte técnico. Contiene nombres de clases de Java, líneas exactas de código donde saltó el error, queries internas a MongoDB, stack traces completos y detalles del servidor. Esta información es profunda para diagnosticar la causa raíz del problema de forma rápida.
+
+* **El mensaje al cliente:**  
+  Está hecho para el usuario final o el frontend. Debe ser seguro, claro y amigable, entregando únicamente el código HTTP correspondiente y un mensaje funcional como franja sin cupos disponibles o correo con formato incorrecto. 
+  
+Nunca se debe exponer el error técnico interno al cliente porque revelar nombres de tecnologías, versiones de librerías o estructuras de base de datos le da pistas valiosas a atacantes para encontrar vulnerabilidades en el sistema.
+
+
 
