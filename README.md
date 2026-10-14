@@ -416,9 +416,21 @@ Para finalizar la etapa de diseño, su líder le asigna una reunión con el equi
 
 #### 1. Diagrama de despliegue de la solución
 
-* **Fuente editable en Draw.io:** https://drive.google.com/file/d/1sYDKYtZpFOvCa8y8ybALDk5QuHJG-ikW/view?usp=sharing
+* **Fuente editable en Draw.io:** [Google Drive](https://drive.google.com/file/d/1sYDKYtZpFOvCa8y8ybALDk5QuHJG-ikW/view?usp=sharing) | [diagrama_despliegue.drawio](docs/images/diagrama_despliegue.drawio)
 * **Vista del diagrama exportado:**
-[diagrama_despliegue.drawio](docs/images/diagrama_despliegue.drawio)
+
+![Diagrama de Despliegue](docs/uml/DiagramaDespliegue.drawio.png)
+
+**Descripción del diagrama:**  
+El diagrama modela la topología física y lógica de la solución Bob's Barber en producción y pruebas. Inicia con el **Dispositivo Desarrollador**, donde se construyen y prueban localmente los componentes con Maven y Java 21, enviando los cambios mediante `git push` al **Repositorio GitHub**.
+
+A través de un webhook, el repositorio dispara el pipeline en el **GitHub Actions Runner** (`ci-cd.yml`), el cual compila con `mvn verify`, empaqueta la imagen Docker inmutable y realiza el `docker push` hacia **Docker Hub Registry** (`josemartinez883/dosw-parcial-t2:latest`).
+
+Desde allí, el pipeline orquesta el despliegue hacia dos ambientes aislados en **Microsoft Azure**:
+- **Ambiente QA:** El servicio **Azure App Service QA** descarga la imagen de Docker Hub (`docker pull :latest`) y ejecuta el contenedor con el artefacto `dosw-parcial.jar` en el puerto interno 8080. Se comunica mediante MongoDB Wire Protocol sobre TLS (puerto 27017) con una base de datos dedicada **MongoDB Atlas QA** (`dosw_parcial_qa`), permitiendo realizar pruebas integrales sin comprometer datos reales.
+- **Ambiente PROD:** Tras validación y aprobación, **Azure App Service PROD** despliega el contenedor con la versión productiva en West US 3, conectado a la base de datos **MongoDB Atlas PROD** (`dosw_parcial`) bajo cifrado TLS.
+
+El **Dispositivo Cliente** (consumiendo desde Swagger UI, una SPA web o Postman) interactúa con las APIs expuestas en Azure mediante peticiones seguras sobre **HTTPS / REST** dirigidas al puerto 443, enrutadas internamente al puerto 8080 de cada contenedor.
 
 
 #### 2. Especificación técnica del despliegue
