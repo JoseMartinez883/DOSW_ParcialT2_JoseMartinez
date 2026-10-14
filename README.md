@@ -214,7 +214,10 @@ Secrets usados: `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`, `AZURE_CREDENTIALS`, `A
 ## Asignación del equipo de Producto - Definición del contrato de la API:
 
 Excel Tabla:
-[Definición del contrato de la API.xlsx](docs%2Fexcel%2FDefinici%F3n%20del%20contrato%20de%20la%20API.xlsx)
+[Definición del contrato de la API.xlsx](docs/excel/Definici%C3%B3n%20del%20contrato%20de%20la%20API.xlsx)
+
+preview:
+![img.png](docs/images/previewExcel.png)
 
 ### ¿Cuál es la diferencia entre una validación de entrada y una validación de negocio? Seleccionen tres reglas del caso, incluyendo al menos una de cada tipo, y justifiquen su clasificación.
 
