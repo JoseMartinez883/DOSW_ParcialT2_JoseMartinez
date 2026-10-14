@@ -416,21 +416,25 @@ Para finalizar la etapa de diseño, su líder le asigna una reunión con el equi
 
 #### 1. Diagrama de despliegue de la solución
 
-* **Fuente editable en Draw.io:** [diagrama_despliegue.drawio](docs/uml/diagrama_despliegue.drawio)
+* **Fuente editable en Draw.io:** https://app.diagrams.net/
 * **Vista del diagrama exportado:**
 
-![Diagrama de Despliegue](docs/images/diagrama_despliegue.png)
+![img_1.png](docs/images/diagramaDespliegue.png)
 
 #### 2. Especificación técnica del despliegue
 
 | Elemento | Tipo | Detalle técnico | Rol en la arquitectura |
 |---|---|---|---|
-| **Dispositivo Cliente** | Dispositivo físico o lógico | Navegador web, cliente HTTP o frontend de la barbería | Emite las peticiones HTTP y consume los endpoints definidos en el contrato de la API. |
-| **Pipeline GitHub Actions** | Servidor de automatización | Runner en Ubuntu Latest con Java 21 Temurin y Docker CLI | Compila el código, ejecuta las pruebas unitarias y genera la imagen inmutable. |
-| **Docker Hub** | Registro de artefactos | Repositorio de imágenes Docker con la etiqueta latest | Almacena y distribuye la imagen de contenedor lista para ejecución. |
-| **Azure App Service** | Nodo de ejecución en la nube | Instancia Web App Linux en Microsoft Azure en puerto 8080 | Aloja y corre el contenedor Docker con la aplicación Spring Boot en producción. |
-| **MongoDB Atlas** | Nodo de base de datos en la nube | Clúster gestionado con réplica y cifrado TLS | Persiste la información de turnos, reservas, usuarios y servicios. |
-| **Mecanismos de comunicación** | Protocolos de red | HTTPS en puerto 443 mapeado a 8080 y protocolo MongoDB en puerto 27017 | Asegura tráfico cifrado tanto desde el cliente como hacia el clúster de datos. |
+| **Desarrollador** | Entorno local | Máquina de desarrollo con JDK 21, Maven y Git | Realiza cambios en el código y lanza el comando git push hacia el repositorio remoto. |
+| **Repositorio GitHub** | Servidor de control de versiones | Repositorio remoto con ramas `develop` y `main` | Centraliza el código fuente y dispara automáticamente el webhook del pipeline de CI/CD. |
+| **GitHub Actions** | Servidor de automatización CI/CD | Runner Ubuntu Latest ejecutando `workflows/ci-cd.yml` | Corre la fase de build con `mvn verify`, empaqueta la imagen y orquesta el despliegue a QA y PROD. |
+| **Docker Hub** | Registro de artefactos | Repositorio de imágenes `josemartinez883/dosw-parcial-t2` | Almacena y versiona la imagen de contenedor que consumen los ambientes de Azure. |
+| **Azure App Service QA** | Nodo de ejecución en la nube | Instancia Web App Linux para pruebas de integración | Aloja el contenedor en ambiente de QA para validación continua antes de paso a producción. |
+| **MongoDB Atlas QA** | Nodo de persistencia cloud | Base de datos `dosw_parcial_qa` con Replica Set | Almacena datos de prueba y aislamiento para el ambiente de QA. |
+| **Azure App Service PROD** | Nodo de ejecución en la nube | Instancia Web App Linux productiva en West US 3 | Aloja la versión estable y pública de la API para usuarios y clientes finales. |
+| **MongoDB Atlas PROD** | Nodo de persistencia cloud | Base de datos `dosw_parcial` con Replica Set y TLS | Almacena los registros reales de reservas, turnos, barberos y usuarios. |
+| **Dispositivo Cliente** | Consumidor HTTP | Swagger UI, SPA Web o Postman consumiendo la API | Emite peticiones HTTPS a los endpoints públicos de la barbería. |
+| **Mecanismos de comunicación** | Protocolos y puertos | HTTPS en puerto 443 hacia 8080 y MongoDB Wire Protocol en puerto 27017 | Conexiones cifradas en tránsito en ambos ambientes de la solución. |
 
 ---
 
@@ -507,4 +511,4 @@ La diferencia radica en el público objetivo y en la seguridad de la informació
 Nunca se debe exponer el error técnico interno al cliente porque revelar nombres de tecnologías, versiones de librerías o estructuras de base de datos le da pistas valiosas a atacantes para encontrar vulnerabilidades en el sistema.
 
 
-
+
