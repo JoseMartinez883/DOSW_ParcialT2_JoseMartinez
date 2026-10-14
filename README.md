@@ -193,6 +193,7 @@ docker run -p 8080:8080 -e JWT_SECRET=bXlfc3VwZXJfc2VjcmV0X2tleV9mb3Jfand0X3ZhbG
 El pipeline realiza build, testing, creación de imagen Docker, publicación en Docker Hub y despliegue a Azure Web App.
 
 ### Evidencia de pipeline en verde en GitHub Actions
+
 ![Pipeline CI/CD en verde](docs/images/WorksFlowsEvidence.png)
 
 Secrets usados: `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`, `AZURE_CREDENTIALS`, `AZURE_WEBAPP_NAME`, `JWT_SECRET`
@@ -207,46 +208,84 @@ Secrets usados: `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`, `AZURE_CREDENTIALS`, `A
 
 ![Evidencia Figma](docs/images/FigmaEvidence.png)
 
-
-### Asignación del equipo de Arquitectura - Distribución de las responsabilidades: 
+### Asignación del equipo de Arquitectura - Distribución de las responsabilidades:
 
 #### Diagrama de componentes general
 
-![ComponentsGeneral.png](docs%2Fimages%2FComponentsGeneral.png)
+![Diagrama de componentes general](docs/images/ComponentsGeneral.png)
 
+#### Diagrama de componentes específico siguiendo el esquema de MVC.
 
-#### Diagrama de componentes específico siguiendo el esquema de MVC. 
-
+![Diagrama de componentes específico siguiendo el esquema de MVC](docs/images/DiagramComponentEspecific.png)
 
 #### Diagrama de clases
 
+![Diagrama de clases](docs/images/DiagramClass.png)
 
-### Preguntas para la revisión con Arquitectura: 
+### Preguntas para la revisión con Arquitectura:
 
 #### ¿Qué problemas aparecen cuando no se separan correctamente las capas? Presenten un ejemplo del caso y expliquen cómo distribuyen sus responsabilidades.
-Pueden llegar a surgir multiples errores, desde codigo repetido (metodos, funcionalidad, responsabilidades), mal flujo de solicitudes, conversion de datos, problemas con los modelos, el flujo de os test tambien se podria ver afectado ya que al implementar un test digamos para un DTO, se debe haber un flujo con las clases de los mappers y al no tener una buena organizacion, el test se vería afectado
+
+Pueden llegar a surgir múltiples problemas de diseño y mantenimiento: código repetido (métodos y responsabilidades duplicadas en varios puntos), un mal flujo en el manejo de las solicitudes, confusiones en la conversión de datos y problemas con los modelos al acoplar la base de datos con la capa web. Además, el flujo de las pruebas unitarias se vería gravemente afectado, ya que al querer probar un DTO o una regla de negocio aislada, si no existe una separación limpia mediante mappers y servicios, el test obligaría a depender de la base de datos o de peticiones completas.
+
+Ejemplo del caso Bob's Barber (Pedir un turno): Si el `TurnoController` recibiera la solicitud y en lugar de delegar se pusiera a consultar directamente a MongoDB para contar si ya hay 3 reservas en la franja, calculara la suma de los servicios y guardara la reserva en la base de datos:
+
+* El controlador tendría demasiadas responsabilidades y violaría el principio de responsabilidad única.
+* Si el día de mañana se cambia MongoDB o la regla de aforo cambia, tocaría modificar directamente el controlador web en lugar de un servicio.
+
+**Distribución correcta de responsabilidades:**
+
+1. **Controller (`TurnoController`):** Solo recibe la petición HTTP, valida el formato del JSON entrante (Bean Validation) y llama al servicio.
+2. **Service (`TurnoServiceImpl`):** Orquesta el flujo del caso de uso, invoca a los validadores de negocio, calcula el precio total y coordina la persistencia.
+3. **Validator (`ReservaValidatorImpl`):** Verifica las reglas del negocio de la barbería (aforo $\le 3$, especialidad del barbero `E02`).
+4. **Repository (`TurnoRepository`, `ReservaRepository`):** Se encarga exclusivamente de las consultas y operaciones con MongoDB.
 
 #### ¿Qué diferencia existe entre un validador, una utilidad y un servicio? Ubiquen un ejemplo de cada uno en su diseño e indiquen su responsabilidad.
 
-### Validador
-Es una clase que verifica el proposito de la aplicacion (funcionalidad) y esos se ven representados a partir de (Request DTOs, entidades, etc.). En donde se implementan las anotaciones (@NotNull, @Email, @Size, etc.), se realiza a partir de la inserccion de datos, en donde se cumpla los inputs, con ciertos requerimientos com el correo, o la contraseña con ciertos caracteres
+* **Servicio (`TurnoServiceImpl`):**
 
-### Utilidad
-Son clases, adicionales que complementan las clases de modelo, siendo estas genericas pero utiles como una interfaz, No manejan persistencia, ni lógica de negocio compleja. implementadfas como delegacion de responsabilidad Son estáticas, no necesitan inyección de dependencias. 
-En nuestro caso, seria un ejemplo seria para poder validar que el correo contenga el dominio de "@gmail"
+  * *Responsabilidad:* Se encarga de todo el flujo de negocio, coordina las validaciones, calcula operaciones (como la suma total de los precios de los servicios) y le pide a los repositorios que guarden la información. Es un componente administrado por Spring (`@Service`) e inyecta dependencias por constructor.
+* **Validador (`ReservaValidatorImpl`):**
 
-### Servicio
-Son clases que contiene reglas complementando la logica de negocio, representado con @service
-En nuestro caso, un ejemplo seria serviceTurno, con el fin de validar que e
+  * *Responsabilidad:* Es una clase especializada cuya única función es evaluar si se cumplen las reglas del negocio antes de ejecutar una acción, aplicando el principio de falla rapida, es decir, el primero que falle, como una cadena de responsabilidad, al fallar uno, se para la cadena.
+  * *Ejemplo en el diseño:* `ReservaValidatorImpl` (o la cadena de validadores), que revisa que el barbero libre en la franja realmente tenga la especialidad requerida para el corte (`E02`) y que la franja no supere los 3 turnos ocupados (`E01`).
+* **Utilidad (`DateUtil` o `JwtUtil`):**
 
+  * *Responsabilidad:* Son métodos auxiliares, genéricos y reutilizables que realizan cálculos o transformaciones puras sin guardar estado ni depender de la base de datos. Suelen tener métodos estáticos o sin dependencias de dominio complejas.
+  * *Ejemplo en el diseño:* `DateUtil`, que toma una hora de inicio y calcula la franja exacta de una hora, o verifica si una fecha corresponde a un día laboral del barbero (ej. lunes a jueves para Miguel).
 
 #### ¿Qué diferencia existe entre el Mapper IN y el Mapper OUT? Indiquen dónde se ubican y qué representaciones transforman cada uno.
-convierte lo que entra al Service, ya sea un RequestDTO del Controller o un Modelo que llega del Repository.
 
-convierte lo que sale del Service hacia un ResponseDTO para el Controller, o hacia un Modelo para persistir en BD.
+La diferencia radica en **en qué frontera de la arquitectura se ubican y qué modelos traducen**:
 
-El Mapper In interactua entre el controller y el service
-El Mapper out interactua entre el service y el repository
+* **Mapper IN (`TurnoDTOMapper` / `AuthDTOMapper`):**
 
-#### Retomen las tres reglas clasificadas en el paso anterior: ¿en qué componente debe ejecutarse cada una y por qué? 
+  * *Ubicación:* En la **Capa Controller** (`edu.dosw.parcial.controller.mappers`).
+  * *Transformación:* Traduce entre los objetos de transferencia de la web y el dominio:
+    * **Entrada:** `Request DTO` (JSON que envía el cliente) ➔ `Modelo de Dominio`.
+    * **Salida:** `Modelo de Dominio` ➔ `Response DTO` (JSON que recibe el cliente).
+  * *Propósito:* Aísla a la capa de Servicio para que no tenga idea de cómo viajan los datos en HTTP.
+* **Mapper OUT (`TurnoEntityMapper` / `ReservaEntityMapper`):**
 
+  * *Ubicación:* En la **Capa de Persistencia** (`edu.dosw.parcial.persistence.mappers`).
+  * *Transformación:* Traduce entre el dominio y los documentos de MongoDB:
+    * `Modelo de Dominio` ➔ `Documento MongoDB (@Document)` (para guardar en BD).
+    * `Documento MongoDB` ➔ `Modelo de Dominio` (al consultar de la BD para entregárselo al servicio).
+  * *Propósito:* Aísla a la capa de Servicio para que no dependa de las anotaciones ni estructuras de la base de datos NoSQL.
+
+#### Retomen las tres reglas clasificadas en el paso anterior: ¿en qué componente debe ejecutarse cada una y por qué?
+
+Retomando las tres reglas seleccionadas en la revisión de Producto:
+
+1. **Formato y dominio del correo (`E08 - Correo inválido`):**
+
+   * *Componente:* Se ejecuta en el **Request DTO / Controller** (`CreateReservaRequest` o `LoginRequest`).
+   * *Por qué:* Es una validación de entrada puramente sintáctica. Se resuelve inmediatamente con la anotación `@Pattern` de Bean Validation apenas llega el JSON, evitando gastar recursos del servidor o llegar a la capa de servicios si el correo no termina en `@gmail.com`.
+2. **Longitud numérica del teléfono (`E07 - Teléfono inválido`):**
+
+   * *Componente:* Se ejecuta en el **Request DTO / Controller** (`CreateReservaRequest`).
+   * *Por qué:* Al igual que el correo, es una validación de formato estructural. El controlador la rechaza de inmediato con un `400 Bad Request` usando `@Pattern(regexp = "^[0-9]{10}$")` antes de que la petición toque el dominio.
+3. **Compatibilidad de especialidad del barbero (`E02 - Especialidad incompatible`):**
+
+   * *Componente:* Se ejecuta en la **Capa Core / Validator** (`ReservaValidatorImpl` o `BarberoEspecialidadValidator`).
+   * *Por qué:* Es una regla de negocio semántica. No se puede saber si el barbero es apto solo mirando el JSON de entrada, el componente necesita consultar al barbero en la base de datos (MongoDB), extraer su lista de especialidades y verificar si incluye la especialidad requerida por el servicio (por ejemplo, que Laura tenga `CAPILAR` o que Miguel tenga `CORTE CON BARBA`).
