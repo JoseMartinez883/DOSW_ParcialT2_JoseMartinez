@@ -322,4 +322,84 @@ Seleccionen dos riesgos del OWASP Top 10 que se pueden encontrar en su API. Para
 La opción más adecuada es autenticación stateless con JWT.
 
 * **Justificación técnica:**  
-  Como tenemos una API REST desacoplada que se va a consumir desde frontend web o clientes HTTP, manejar sesiones en memoria del servidor nos complicaría el backend y nos obligaría a montar herramientas extra como Redis. Con JWT el servidor solo valida la firma con la clave `JWT_SECRET` que ya tenemos en las variables de entorno. Al llegar una petición, Spring Security saca el usuario y sus permisos directamente del token sin pegarle a la base de datos en cada endpoint intermedio, lo que hace el backend mucho más liviano, rápido y directo de mantener para este MVP.
+  Como tenemos una API REST desacoplada que se va a consumir desde frontend web o clientes HTTP, manejar sesiones en memoria del servidor nos complicaría el backend y nos obligaría a montar herramientas extra como Redis. Con JWT el servidor solo valida la firma con la clave `JWT_SECRET` que ya tenemos en las variables de entorno. Al llegar una petición, Spring Security saca el usuario y sus permisos directamente del token sin pegarle a la base de datos en cada endpoint intermedio, lo que hace el backend mucho más liviano, rápido y directo de mantener para este MVP.
+
+---
+
+## Punto 5
+Asignación del Equipo de Calidad - Definir cómo comprobar el comportamiento:
+
+El equipo de QA utilizará el contrato de la API como referencia para validar la solución. Su tarea es definir los escenarios de pruebas de Pedir un turno, cubriendo tanto las reservas exitosas como los rechazos siguiendo la aplicación del esquema de TDD (Red, Green, Refactor).
+
+Explique cómo comprobaría que se respeta el orden y que, ante una falla, no se crea la reserva ni se modifica el turno. No es necesario escribir el código de las pruebas en esta respuesta.
+
+---
+
+### Desarrollo
+
+#### 1. Ciclo TDD aplicado a la operación Pedir un turno
+
+* **Red (Fase roja):**  
+  Escribimos la prueba unitaria o de integración antes de implementar el servicio o validador. Por ejemplo, definimos un test que espera que una petición con datos válidos retorne un estado `201 Created` y persista la reserva. Al ejecutar la suite, la prueba falla porque la lógica o el endpoint aún no existen o no cumplen la aserción.
+
+* **Green (Fase verde):**  
+  Implementamos el código mínimo en el controlador y servicio para satisfacer la prueba y hacer que pase a verde, sin agregar optimizaciones ni lógica de más.
+
+* **Refactor (Fase de refactorización):**  
+  Limpiamos el código, extraemos validadores a clases independientes, mejoramos nombres y desacoplamos dependencias, comprobando en cada cambio que toda la suite de pruebas siga pasando en verde.
+
+---
+
+#### 2. Escenarios de prueba para Pedir un turno
+
+| Escenario | Entrada / Condiciones | Resultado esperado | Validación clave |
+|---|---|---|---|
+| **Reserva exitosa** (Camino feliz) | Franja horaria disponible, barbero asignado con especialidad requerida, cliente con correo `@gmail.com` y teléfono de 10 dígitos, servicio permitido. | `201 Created` con payload de la reserva (`idReserva`, `fechaHora`, estado `CONFIRMADA`). | Se inserta 1 documento en la colección de reservas y el turno pasa de `DISPONIBLE` a `OCUPADO`. |
+| **Rechazo por franja llena** (E01) | Franja horaria sin cupos o ya ocupada. | `409 Conflict` con código de error `E01`. | El flujo se corta de inmediato; no se verifica el barbero ni el cliente; ningún dato se modifica. |
+| **Rechazo por especialidad incompatible** (E02) | Franja disponible, pero el barbero seleccionado no tiene la especialidad que exige el servicio solicitado. | `422 Unprocessable Entity` con código `E02`. | El servicio rechaza la solicitud; no se crea reserva y el turno sigue en estado `DISPONIBLE`. |
+| **Rechazo por barbero no disponible** (E03) | Franja disponible y barbero con especialidad, pero el barbero no está activo o se encuentra en descanso. | `409 Conflict` con código `E03`. | Se cancela la operación sin guardar registros huérfanos. |
+| **Rechazo por datos de cliente inválidos** (E07 / E08) | Correo sin dominio `@gmail.com` o teléfono diferente a 10 dígitos numéricos. | `400 Bad Request` disparado por las validaciones de entrada (`@Valid`). | La petición se rechaza en la capa del controlador mediante los DTOs, sin consultar MongoDB. |
+
+---
+
+#### 3. Comprobación del orden de validación y de la atomicidad ante fallas
+
+* **Comprobación del orden estricto:**  
+  Configuramos pruebas donde el request contiene varias fallas al mismo tiempo (por ejemplo, franja llena y simultáneamente un barbero sin especialidad). En el assert verificamos que la respuesta devuelva únicamente el error del primer paso (`E01 - Franja llena`). Usando Mockito sobre los colaboradores, validamos con `verifyNoInteractions()` o `verify(..., never())` que los métodos correspondientes a las validaciones posteriores nunca llegaron a ejecutarse.
+
+* **Comprobación de no creación y no modificación:**  
+  En las pruebas de fallo, antes de disparar la petición capturamos el conteo de reservas en base de datos y el estado actual del turno. Al recibir la respuesta de error (400, 409 o 422), consultamos nuevamente MongoDB y comprobamos que:
+  - El conteo de documentos en la colección de reservas no cambió.
+  - El documento del turno sigue teniendo exactamente el estado `DISPONIBLE`.
+  - Si la falla ocurre a mitad del servicio, la anotación `@Transactional` revierte cualquier cambio pendiente, garantizando consistencia total.
+
+---
+
+### Preguntas para la revisión con el equipo de Calidad
+
+#### a. Evidencia del cumplimiento de reglas de negocio y alcance de pruebas unitarias
+
+* **Cómo las pruebas aportan evidencia:**  
+  Las pruebas automatizadas funcionan como especificaciones vivas del sistema. Cada regla del contrato queda plasmada en un caso de prueba ejecutable. Cuando el pipeline de CI/CD corre `mvn test`, genera reportes objetivos (Surefire y JaCoCo) que demuestran que el sistema reacciona exactamente como exige el negocio ante datos correctos y erróneos, sirviendo como evidencia técnica auditable.
+
+* **Qué se verifica puntualmente con pruebas unitarias:**  
+  Se valida la lógica pura de negocio en aislamiento, simulando con mocks la base de datos y servicios externos:
+  - Que los métodos validadores arrojen la excepción de dominio correspondiente ante condiciones inválidas (como fechas pasadas o barberos sin especialidad).
+  - Que la transición de estados en el modelo `Turno` solo permita transiciones válidas (`DISPONIBLE` a `OCUPADO`).
+  - Que los mappers transformen correctamente los campos entre DTOs, entidades y modelos de dominio sin perder datos ni truncar valores.
+  - Que la secuencia de validaciones en la capa de servicio se detenga en el primer fallo sin invocar el guardado en el repositorio.
+
+---
+
+#### b. ¿Las pruebas por sí solas garantizan la ausencia de errores?
+
+No. Las pruebas demuestran la presencia de defectos conocidos, pero no pueden garantizar la ausencia total de errores en un software.
+
+* **Justificación técnica:**  
+  Una suite de pruebas, incluso alcanzando altos porcentajes de cobertura de código, solo puede evaluar los escenarios y casos de borde que los desarrolladores y QA previeron al escribirlas. No cubre situaciones imprevistas del entorno real como:
+  - Condiciones de carrera y concurrencia extrema cuando cientos de usuarios intentan reservar el mismo turno en el mismo milisegundo.
+  - Comportamientos atípicos de infraestructura, como caídas de red, latencias altas o saturación del pool de conexiones a MongoDB.
+  - Malentendidos en los requerimientos originales: el código puede pasar todas sus pruebas en verde porque cumple la lógica programada, pero esa lógica podría estar resolviendo una necesidad equivocada del cliente.
+  
+  Por este motivo, las pruebas automatizadas deben complementarse con análisis estático de código (SonarQube), pruebas de carga y monitoreo continuo en producción mediante logs estructurados y métricas de salud.
+
