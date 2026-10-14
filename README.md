@@ -224,7 +224,7 @@ preview:
 
 La diferencia principal está en qué revisa cada una y en qué capa se ejecuta:
 
-* **Validación de entrada:**Revisa únicamente que los datos vengan completos, con el tipo correcto y el formato esperado. Se ejecuta apenas entra la petición al controlador usando los DTOs con anotaciones de Bean Validation como `@NotNull` o `@Pattern`. Su gran ventaja es la velocidad: no necesita tocar la base de datos ni consultar lógica interna, así que si los datos vienen mal estructurados, la API corta la petición de una vez devolviendo un `400 Bad Request`.
+* Validación de entrada:Revisa únicamente que los datos vengan completos, con el tipo correcto y el formato esperado. Se ejecuta apenas entra la petición al controlador usando los DTOs con anotaciones de Bean Validation como `@NotNull` o `@Pattern`. Su gran ventaja es la velocidad: no necesita tocar la base de datos ni consultar lógica interna, así que si los datos vienen mal estructurados, la API corta la petición de una vez devolviendo un `400 Bad Request`.
 * **Validación de negocio:**
   Revisa que la solicitud tenga sentido dentro de las reglas de la barbería. Esta validación se ejecuta en los servicios de la capa core y sí necesita consultar MongoDB. Por ejemplo, comprueba si el barbero realmente está disponible en ese horario, si domina el servicio solicitado o si la franja ya alcanzó su cupo máximo. Al fallar, responde con códigos de error semánticos según el motivo del rechazo, como `404 Not Found`, `409 Conflict` o `422 Unprocessable Entity`.
 
@@ -247,8 +247,8 @@ La diferencia principal está en qué revisa cada una y en qué capa se ejecuta:
 
 ### En Pedir un turno, ¿cómo debe responder la API si fallan varias condiciones? Expliquen qué error se informa y qué cambios deben evitarse.
 
-* **Cómo responde la API:**La API sigue la cadena de validaciones en orden secuencial estricto: primero franja disponible, luego barbero disponible con especialidad, después datos del cliente y finalmente servicio permitido. Si se presentan varias fallas en una misma petición, el flujo se detiene en la primera que no se cumpla y no sigue evaluando las demás.
-* **Qué error se informa:**Se informa únicamente el motivo de la primera falla encontrada junto a su código HTTP. Por ejemplo, si la franja ya estaba llena con error E01, se responde inmediatamente un `409 Conflict` indicando que no hay cupo. La API no evalúa las siguientes reglas ni acumula una lista de errores.
+* Cómo responde la API:La API sigue la cadena de validaciones en orden secuencial estricto: primero franja disponible, luego barbero disponible con especialidad, después datos del cliente y finalmente servicio permitido. Si se presentan varias fallas en una misma petición, el flujo se detiene en la primera que no se cumpla y no sigue evaluando las demás.
+* Qué error se informa: Se informa únicamente el motivo de la primera falla encontrada junto a su código HTTP. Por ejemplo, si la franja ya estaba llena con error E01, se responde inmediatamente un `409 Conflict` indicando que no hay cupo. La API no evalúa las siguientes reglas ni acumula una lista de errores.
 * **Qué cambios deben evitarse:**Al fallar cualquier validación, la operación se cancela en el acto y la base de datos debe quedar exactamente igual que antes de la petición:
 
   * **No se crea la reserva:** no se guarda ningún registro en la colección de reservas.
@@ -256,8 +256,6 @@ La diferencia principal está en qué revisa cada una y en qué capa se ejecuta:
 
 ---
 
-<<<<<<< HEAD
-=======
 ## Asignación del equipo de Arquitectura - Distribución de las responsabilidades:
 
 ### Diagrama de componentes general
@@ -469,15 +467,15 @@ Seleccionen dos riesgos del OWASP Top 10 que se pueden encontrar en su API. Para
 
 ##### 1. Control de acceso roto o BOLA
 
-* **Escenario en la barbería:**Un cliente cancela su cita llamando a `DELETE /api/v1/reservas/{idReserva}`. Si en el backend solo tomamos el ID que viene en la ruta sin verificar quién es el dueño de la cita, un usuario malicioso podría cambiar ese ID en la URL y cancelar las reservas de otros clientes o ver sus datos personales.
-* **Mitigación:**En el servicio de reservas extraemos el ID del usuario que viene autenticado en el token y lo comparamos contra el dueño real de la reserva antes de borrar nada. Si el ID no coincide y el usuario no tiene permisos de administrador, rechazamos la petición con un `403 Forbidden`.
+* **Escenario en la barbería:** Un cliente cancela su cita llamando a `DELETE /api/v1/reservas/{idReserva}`. Si en el backend solo tomamos el ID que viene en la ruta sin verificar quién es el dueño de la cita, un usuario malicioso podría cambiar ese ID en la URL y cancelar las reservas de otros clientes o ver sus datos personales.
+* **Mitigación:** En el servicio de reservas extraemos el ID del usuario que viene autenticado en el token y lo comparamos contra el dueño real de la reserva antes de borrar nada. Si el ID no coincide y el usuario no tiene permisos de administrador, rechazamos la petición con un `403 Forbidden`.
 * **Verificación:**
   Hacemos una prueba de integración creando una reserva con el usuario A y luego intentamos cancelarla mandando el token del usuario B con el ID de la cita de A. El test debe confirmar que el backend responde con un `403 Forbidden` y que la reserva sigue intacta en MongoDB.
 
 ##### 2. Fallas de autenticación
 
-* **Escenario en la barbería:**El endpoint `POST /api/v1/auth/login` no tiene límite de intentos o genera tokens que nunca vencen. Un atacante podría lanzar un script automatizado para probar listas de contraseñas contra las cuentas de los administradores o barberos sin que la API corte los intentos.
-* **Mitigación:**Configuramos tokens JWT con tiempo de expiración corto, como 15 a 30 minutos, guardamos contraseñas con hash seguro usando BCrypt y metemos un filtro de rate limiting para cortar peticiones repetidas si una misma IP o cuenta falla varias veces seguidas.
+* **Escenario en la barbería:** El endpoint `POST /api/v1/auth/login` no tiene límite de intentos o genera tokens que nunca vencen. Un atacante podría lanzar un script automatizado para probar listas de contraseñas contra las cuentas de los administradores o barberos sin que la API corte los intentos.
+* **Mitigación:** Configuramos tokens JWT con tiempo de expiración corto, como 15 a 30 minutos, guardamos contraseñas con hash seguro usando BCrypt y metemos un filtro de rate limiting para cortar peticiones repetidas si una misma IP o cuenta falla varias veces seguidas.
 * **Verificación:**
   Lanzamos una prueba automatizada que mande 10 peticiones seguidas con contraseñas incorrectas al login, validando que el servidor devuelva un `429 Too Many Requests`. También probamos mandar un token ya expirado y verificamos que responda con `401 Unauthorized`.
 
@@ -506,8 +504,8 @@ Explique cómo comprobaría que se respeta el orden y que, ante una falla, no se
 
 #### 1. Ciclo TDD aplicado a la operación Pedir un turno
 
-* **Fase Red:**Escribimos la prueba unitaria o de integración antes de implementar el servicio o validador. Diseñamos un test que espera que una petición válida devuelva un estado `201 Created` y persista la reserva. Al correr la prueba, falla de inmediato porque el endpoint o la lógica de negocio todavía no existen.
-* **Fase Green:**Escribimos la lógica mínima necesaria en el controlador y servicio para que la prueba pase a verde, sin meter código extra ni optimizaciones antes de tiempo.
+* **Fase Red:** Escribimos la prueba unitaria o de integración antes de implementar el servicio o validador. Diseñamos un test que espera que una petición válida devuelva un estado `201 Created` y persista la reserva. Al correr la prueba, falla de inmediato porque el endpoint o la lógica de negocio todavía no existen.
+* **Fase Green:** Escribimos la lógica mínima necesaria en el controlador y servicio para que la prueba pase a verde, sin meter código extra ni optimizaciones antes de tiempo.
 * **Fase Refactor:**
   Organizamos el código, desacoplamos validadores en clases dedicadas y mejoramos nombres, corriendo la suite completa para asegurarnos de que todo siga pasando en verde.
 
@@ -527,8 +525,8 @@ Explique cómo comprobaría que se respeta el orden y que, ante una falla, no se
 
 #### 3. Comprobación del orden de validación y de la atomicidad ante fallas
 
-* **Comprobación del orden estricto:**Montamos pruebas donde el request contiene varias fallas al mismo tiempo, como mandar una franja llena y a la vez un barbero sin especialidad. En el assert verificamos que la API retorne únicamente el error del primer paso, que es franja llena E01. Con Mockito comprobamos que los métodos de las validaciones posteriores y el repositorio de reservas nunca llegaron a ejecutarse.
-* **Comprobación de no creación y no modificación:**En las pruebas de rechazo, antes de enviar la petición consultamos el conteo de reservas y el estado del turno. Luego de recibir el error 400, 409 o 422, verificamos de nuevo en MongoDB:
+* **Comprobación del orden estricto:** Montamos pruebas donde el request contiene varias fallas al mismo tiempo, como mandar una franja llena y a la vez un barbero sin especialidad. En el assert verificamos que la API retorne únicamente el error del primer paso, que es franja llena E01. Con Mockito comprobamos que los métodos de las validaciones posteriores y el repositorio de reservas nunca llegaron a ejecutarse.
+* **Comprobación de no creación y no modificación:** En las pruebas de rechazo, antes de enviar la petición consultamos el conteo de reservas y el estado del turno. Luego de recibir el error 400, 409 o 422, verificamos de nuevo en MongoDB:
 
   - El conteo de reservas se mantiene igual.
   - El turno conserva su estado `DISPONIBLE`.
@@ -540,8 +538,8 @@ Explique cómo comprobaría que se respeta el orden y que, ante una falla, no se
 
 #### a. Evidencia del cumplimiento de reglas de negocio y alcance de pruebas unitarias
 
-* **Cómo las pruebas aportan evidencia:**Las pruebas automatizadas sirven como especificaciones vivas del sistema. Cada regla del contrato queda asegurada en un test ejecutable. Cuando el pipeline corre `mvn test` en cada push o PR, los reportes de ejecución demuestran con hechos que la API responde tal como espera el negocio ante datos válidos y casos de error.
-* **Qué se verifica puntualmente con pruebas unitarias:**Se prueba la lógica pura en aislamiento total, usando mocks para no depender de la base de datos ni de servicios externos:
+* **Cómo las pruebas aportan evidencia:** Las pruebas automatizadas sirven como especificaciones vivas del sistema. Cada regla del contrato queda asegurada en un test ejecutable. Cuando el pipeline corre `mvn test` en cada push o PR, los reportes de ejecución demuestran con hechos que la API responde tal como espera el negocio ante datos válidos y casos de error.
+* **Qué se verifica puntualmente con pruebas unitarias:** Se prueba la lógica pura en aislamiento total, usando mocks para no depender de la base de datos ni de servicios externos:
 
   - Que los validadores lancen la excepción de dominio correspondiente ante datos inválidos, como un barbero sin la especialidad requerida.
   - Que el modelo `Turno` solo permita transiciones válidas de `DISPONIBLE` a `OCUPADO`.
@@ -554,7 +552,7 @@ Explique cómo comprobaría que se respeta el orden y que, ante una falla, no se
 
 No. Las pruebas demuestran que hay defectos cuando fallan, pero no pueden garantizar que el software esté 100% libre de errores.
 
-* **Justificación técnica:**Una suite de pruebas, incluso con cobertura alta, solo valida los casos que el equipo llegó a imaginar y programar en los tests. Quedan por fuera factores del entorno real como:
+* **Justificación técnica:** Una suite de pruebas, incluso con cobertura alta, solo valida los casos que el equipo llegó a imaginar y programar en los tests. Quedan por fuera factores del entorno real como:
 
   - Condiciones de carrera cuando muchos usuarios compiten por el mismo turno en el mismo milisegundo.
   - Problemas de infraestructura, caídas de red o saturación del pool de conexiones en MongoDB.
@@ -614,8 +612,8 @@ El **Dispositivo Cliente** (consumiendo desde Swagger UI, una SPA web o Postman)
 
 #### a. Etapas principales de un pipeline CI/CD y propósito de cada una
 
-* **Etapa de integración y pruebas:**Descarga el código en el runner de GitHub Actions, configura el entorno con Java 21 y ejecuta `mvn verify`. Su objetivo es compilar el proyecto y correr toda la suite de pruebas automatizadas y cobertura. Si algo falla o no compila, corta el pipeline de una vez para que ningún error llegue a etapas posteriores.
-* **Etapa de empaquetado y subida de imagen:**Toma el Dockerfile multietapa, construye la imagen del contenedor con el jar generado y se autentica contra Docker Hub para hacer el push de la imagen etiquetada con latest. Su propósito es generar un artefacto inmutable y portable que sea exactamente igual en pruebas y en producción.
+* **Etapa de integración y pruebas:** Descarga el código en el runner de GitHub Actions, configura el entorno con Java 21 y ejecuta `mvn verify`. Su objetivo es compilar el proyecto y correr toda la suite de pruebas automatizadas y cobertura. Si algo falla o no compila, corta el pipeline de una vez para que ningún error llegue a etapas posteriores.
+* **Etapa de empaquetado y subida de imagen:** Toma el Dockerfile multietapa, construye la imagen del contenedor con el jar generado y se autentica contra Docker Hub para hacer el push de la imagen etiquetada con latest. Su propósito es generar un artefacto inmutable y portable que sea exactamente igual en pruebas y en producción.
 * **Etapa de despliegue continuo:**
   Se conecta a Microsoft Azure usando las credenciales del service principal y le ordena a Azure Web App actualizar el contenedor descargando la última versión de la imagen desde Docker Hub. Su propósito es publicar la aplicación en vivo sin intervención manual y reduciendo al mínimo el tiempo de indisponibilidad.
 
@@ -633,7 +631,7 @@ No se debe permitir el despliegue bajo ninguna circunstancia. El objetivo princi
 
 Los logs dan visibilidad en tiempo real de lo que ocurre dentro de la aplicación mientras está corriendo en Azure, permitiendo entender fallas y auditar eventos sin tener que pausar el servicio ni entrar a depurar código en vivo.
 
-* **Al investigar una reserva fallida:**Registramos en nivel `WARN` o `ERROR`:
+* **Al investigar una reserva fallida:** Registramos en nivel `WARN` o `ERROR`:
 
   - Identificador único de la petición o correlation ID para rastrear la llamada completa.
   - Fecha y hora exacta en formato UTC.
@@ -641,7 +639,7 @@ Los logs dan visibilidad en tiempo real de lo que ocurre dentro de la aplicació
   - Datos de negocio involucrados, como el ID del cliente, ID del barbero, fecha del turno y código de servicio.
   - Motivo puntual del rechazo según la regla que falló, por ejemplo franja llena E01 o barbero sin especialidad E02.
   - Stack trace de la excepción en caso de que la falla haya sido por caída de conexión con MongoDB.
-* **Al investigar un error de autenticación:**Registramos en nivel `WARN`:
+* **Al investigar un error de autenticación:** Registramos en nivel `WARN`:
 
   - Fecha, hora e IP de origen de la solicitud.
   - Correo electrónico que intentó iniciar sesión.
@@ -657,6 +655,7 @@ Los logs dan visibilidad en tiempo real de lo que ocurre dentro de la aplicació
   - Tiempos de respuesta y duración de consultas pesadas a la base de datos.
   - Códigos de respuesta HTTP y estados de dominio, como `CONFIRMADA` o `CANCELADA`.
   - Identificadores de negocio que no sean datos sensibles, como `reservaId`, `turnoId` o `barberoId`.
+    
 * **Datos sensibles que nunca deben registrarse:**
 
   - Contraseñas en texto plano ni contraseñas con hash.
@@ -670,7 +669,7 @@ Los logs dan visibilidad en tiempo real de lo que ocurre dentro de la aplicació
 
 La diferencia radica en el público objetivo y en la seguridad de la información:
 
-* **El log interno:**Está hecho para el equipo de desarrollo y soporte técnico. Contiene nombres de clases de Java, líneas exactas de código donde saltó el error, queries internas a MongoDB, stack traces completos y detalles del servidor. Esta información es profunda para diagnosticar la causa raíz del problema de forma rápida.
+* **El log interno:** Está hecho para el equipo de desarrollo y soporte técnico. Contiene nombres de clases de Java, líneas exactas de código donde saltó el error, queries internas a MongoDB, stack traces completos y detalles del servidor. Esta información es profunda para diagnosticar la causa raíz del problema de forma rápida.
 * **El mensaje al cliente:**
   Está hecho para el usuario final o el frontend. Debe ser seguro, claro y amigable, entregando únicamente el código HTTP correspondiente y un mensaje funcional como franja sin cupos disponibles o correo con formato incorrecto.
 
