@@ -221,42 +221,42 @@ preview:
 
 ### ¿Cuál es la diferencia entre una validación de entrada y una validación de negocio? Seleccionen tres reglas del caso, incluyendo al menos una de cada tipo, y justifiquen su clasificación.
 
-La diferencia principal está en **qué revisa cada una y en qué parte de la aplicación se ejecuta**:
+La diferencia principal está en qué revisa cada una y en qué capa se ejecuta:
 
-* **Validación de entrada:** Revisa únicamente el formato, tipo y que esten los datos que el cliente. Se hace apenas llega la petición en el controlador (usando DTOs y anotaciones como `@NotNull`, `@Pattern`, etc.). Su ventaja es que es rápida y no necesita conectarse a la base de datos ni consultar nada del sistema, si los datos vienen mal escritos o incompletos, se rechazan de una vez con un error `400 Bad Request`.
+* **Validación de entrada:**  
+  Revisa únicamente que los datos vengan completos, con el tipo correcto y el formato esperado. Se ejecuta apenas entra la petición al controlador usando los DTOs con anotaciones de Bean Validation como `@NotNull` o `@Pattern`. Su gran ventaja es la velocidad: no necesita tocar la base de datos ni consultar lógica interna, así que si los datos vienen mal estructurados, la API corta la petición de una vez devolviendo un `400 Bad Request`.
 
-* **Validación de negocio:** Revisa que la solicitud tenga sentido y cumpla con las reglas de negocios de la barbería (esto en nuetro caso del parcial). Esta validación se hace en los servicios (en la lógica del negocio) y sí necesita consultar la base de datos (MongoDB). Por ejemplo, verifica si un barbero realmente trabaja a esa hora, si tiene la especialidad requerida o si ya se llenó el cupo de la hora. Si falla, devuelve errores como `404 Not Found`, `409 Conflict` o `422 Unprocessable Entity`.
+* **Validación de negocio:**  
+  Revisa que la solicitud tenga sentido dentro de las reglas de la barbería. Esta validación se ejecuta en los servicios de la capa core y sí necesita consultar MongoDB. Por ejemplo, comprueba si el barbero realmente está disponible en ese horario, si domina el servicio solicitado o si la franja ya alcanzó su cupo máximo. Al fallar, responde con códigos de error semánticos según el motivo del rechazo, como `404 Not Found`, `409 Conflict` o `422 Unprocessable Entity`.
 
-#### Tres reglas del caso Bob's Barber justificadas:
+#### Tres reglas del caso Bob's Barber justificadas
 
-1. **Validación del correo del cliente (`E08 - Correo inválido`):**
-   * *Regla:* El correo no puede ser nulo, debe tener formato de email y su dominio tiene que ser obligatoriamente `@gmail.com`.
-   * *Justificación:* Es de **entrada**, porque se valida directamente en el DTO con una expresión regular apenas llega el JSON. No necesitamos consultar MongoDB para saber si el texto termina en `@gmail.com` o no.
+1. **Validación del correo del cliente, error E08:**
+   * *Regla:* El correo no puede ser nulo, debe tener formato de email y terminar obligatoriamente en `@gmail.com`.
+   * *Justificación:* Es de **entrada**, porque se valida directo en el DTO con una expresión regular apenas llega el JSON, sin tener que consultar MongoDB para saber si el texto termina en `@gmail.com`.
 
-2. **Validación del teléfono del cliente (`E07 - Teléfono inválido`):**
+2. **Validación del teléfono del cliente, error E07:**
    * *Regla:* El teléfono no puede ser nulo y debe tener exactamente 10 dígitos numéricos.
-   * *Justificación:* Es de **entrada**, porque solo revisa la longitud y el tipo de dato que el usuario escribió en la petición, antes de pasar a cualquier otra lógica.
+   * *Justificación:* Es de **entrada**, porque solo revisa la longitud y el tipo numérico del campo que mandó el usuario antes de pasar a la lógica del servicio.
 
-3. **Compatibilidad de especialidad del barbero (`E02 - Especialidad incompatible`):**
-   * *Regla:* El barbero asignado debe saber hacer el servicio que el cliente pidió (por ejemplo, si pide `SER-002` Corte + barba, el barbero debe tener la especialidad `CORTE CON BARBA`).
-   * *Justificación:* Es de **negocio**, porque con solo ver el JSON de la petición no sabemos qué sabe hacer el barbero. El servicio tiene que ir a la base de datos, buscar al barbero, revisar su lista de especialidades y compararla con el servicio solicitado.
+3. **Compatibilidad de especialidad del barbero, error E02:**
+   * *Regla:* El barbero asignado debe saber realizar el servicio solicitado, por ejemplo tener la especialidad de corte con barba si el cliente pide ese servicio.
+   * *Justificación:* Es de **negocio**, porque con solo ver el JSON de la petición no sabemos qué servicios domina el barbero; el servicio debe consultar la base de datos, traer al barbero, revisar sus especialidades y compararlas contra el servicio pedido.
 
 ---
 
 ### En Pedir un turno, ¿cómo debe responder la API si fallan varias condiciones? Expliquen qué error se informa y qué cambios deben evitarse.
 
 * **Cómo responde la API:**  
-  La API sigue la cadena de validaciones en orden estricto (1. Franja disponible, 2. Barbero disponible con especialidad, 3. Datos del cliente, 4. Servicio permitido). Si se encuentran varias fallas en la misma petición, la API se detiene inmediatamente en la primera que falle.
+  La API sigue la cadena de validaciones en orden secuencial estricto: primero franja disponible, luego barbero disponible con especialidad, después datos del cliente y finalmente servicio permitido. Si se presentan varias fallas en una misma petición, el flujo se detiene en la primera que no se cumpla y no sigue evaluando las demás.
 
 * **Qué error se informa:**  
-  Se informa **únicamente el motivo de la primera falla que ocurrió**, con su código HTTP correspondiente. Por ejemplo, si la franja ya estaba llena (`E01`), se responde inmediatamente un `409 Conflict` indicando que la franja está llena. La API no sigue revisando las demás condiciones ni devuelve una lista acumulada de errores.
+  Se informa únicamente el motivo de la primera falla encontrada junto a su código HTTP. Por ejemplo, si la franja ya estaba llena con error E01, se responde inmediatamente un `409 Conflict` indicando que no hay cupo. La API no evalúa las siguientes reglas ni acumula una lista de errores.
 
 * **Qué cambios deben evitarse:**  
-  Al fallar cualquier validación, el proceso se cancela de inmediato y no debe haber ningún cambio en la base de datos:
-  * **No se debe crear la reserva:** No se puede guardar ningún registro nuevo en la colección de reservas.
-  * **No se debe modificar el turno:** El turno debe quedarse en estado `DISPONIBLE` y no pasar a `OCUPADO`. Esto ya que el turno que el cliente solicito, no se reservo, es decir el turno sigue 
-  'DISPONIBLE'. Aunque, tambien se puede presentar el caso que el turno no este DISPONIBLE, en ese caso la reserva no se crearia. 
-  * La base de datos debe quedar exactamente igual que antes de que llegara la petición.  
+  Al fallar cualquier validación, la operación se cancela en el acto y la base de datos debe quedar exactamente igual que antes de la petición:
+  * **No se crea la reserva:** no se guarda ningún registro en la colección de reservas.
+  * **No se altera el turno:** el turno se mantiene en estado `DISPONIBLE` y no pasa a `OCUPADO`. Si el turno ya estaba ocupado, tampoco se modifica su estado previo.
 
 ---
 
@@ -339,39 +339,39 @@ Explique cómo comprobaría que se respeta el orden y que, ante una falla, no se
 
 #### 1. Ciclo TDD aplicado a la operación Pedir un turno
 
-* **Red (Fase roja):**  
-  Escribimos la prueba unitaria o de integración antes de implementar el servicio o validador. Por ejemplo, definimos un test que espera que una petición con datos válidos retorne un estado `201 Created` y persista la reserva. Al ejecutar la suite, la prueba falla porque la lógica o el endpoint aún no existen o no cumplen la aserción.
+* **Fase Red:**  
+  Escribimos la prueba unitaria o de integración antes de implementar el servicio o validador. Diseñamos un test que espera que una petición válida devuelva un estado `201 Created` y persista la reserva. Al correr la prueba, falla de inmediato porque el endpoint o la lógica de negocio todavía no existen.
 
-* **Green (Fase verde):**  
-  Implementamos el código mínimo en el controlador y servicio para satisfacer la prueba y hacer que pase a verde, sin agregar optimizaciones ni lógica de más.
+* **Fase Green:**  
+  Escribimos la lógica mínima necesaria en el controlador y servicio para que la prueba pase a verde, sin meter código extra ni optimizaciones antes de tiempo.
 
-* **Refactor (Fase de refactorización):**  
-  Limpiamos el código, extraemos validadores a clases independientes, mejoramos nombres y desacoplamos dependencias, comprobando en cada cambio que toda la suite de pruebas siga pasando en verde.
+* **Fase Refactor:**  
+  Organizamos el código, desacoplamos validadores en clases dedicadas y mejoramos nombres, corriendo la suite completa para asegurarnos de que todo siga pasando en verde.
 
 ---
 
 #### 2. Escenarios de prueba para Pedir un turno
 
-| Escenario | Entrada / Condiciones | Resultado esperado | Validación clave |
+| Escenario | Entrada y condiciones | Resultado esperado | Validación clave |
 |---|---|---|---|
-| **Reserva exitosa** (Camino feliz) | Franja horaria disponible, barbero asignado con especialidad requerida, cliente con correo `@gmail.com` y teléfono de 10 dígitos, servicio permitido. | `201 Created` con payload de la reserva (`idReserva`, `fechaHora`, estado `CONFIRMADA`). | Se inserta 1 documento en la colección de reservas y el turno pasa de `DISPONIBLE` a `OCUPADO`. |
-| **Rechazo por franja llena** (E01) | Franja horaria sin cupos o ya ocupada. | `409 Conflict` con código de error `E01`. | El flujo se corta de inmediato; no se verifica el barbero ni el cliente; ningún dato se modifica. |
-| **Rechazo por especialidad incompatible** (E02) | Franja disponible, pero el barbero seleccionado no tiene la especialidad que exige el servicio solicitado. | `422 Unprocessable Entity` con código `E02`. | El servicio rechaza la solicitud; no se crea reserva y el turno sigue en estado `DISPONIBLE`. |
-| **Rechazo por barbero no disponible** (E03) | Franja disponible y barbero con especialidad, pero el barbero no está activo o se encuentra en descanso. | `409 Conflict` con código `E03`. | Se cancela la operación sin guardar registros huérfanos. |
-| **Rechazo por datos de cliente inválidos** (E07 / E08) | Correo sin dominio `@gmail.com` o teléfono diferente a 10 dígitos numéricos. | `400 Bad Request` disparado por las validaciones de entrada (`@Valid`). | La petición se rechaza en la capa del controlador mediante los DTOs, sin consultar MongoDB. |
+| **Reserva exitosa** | Franja horaria disponible, barbero con especialidad requerida, cliente con correo `@gmail.com` y teléfono de 10 dígitos, servicio permitido. | `201 Created` con payload de la reserva confirmada y su identificador. | Se guarda la reserva en MongoDB y el turno pasa de `DISPONIBLE` a `OCUPADO`. |
+| **Rechazo por franja llena - E01** | Franja horaria sin cupos o previamente ocupada. | `409 Conflict` con código E01. | El flujo se corta de inmediato sin evaluar al barbero ni al cliente, dejando la base de datos intacta. |
+| **Rechazo por especialidad incompatible - E02** | Franja disponible, pero el barbero asignado no cuenta con la especialidad del servicio pedido. | `422 Unprocessable Entity` con código E02. | Se cancela la solicitud sin crear reserva y el turno sigue en estado `DISPONIBLE`. |
+| **Rechazo por barbero no disponible - E03** | Franja disponible y barbero con especialidad, pero se encuentra inactivo o en descanso. | `409 Conflict` con código E03. | Se aborta la operación sin guardar registros huérfanos. |
+| **Rechazo por datos de cliente inválidos - E07 y E08** | Correo sin dominio `@gmail.com` o teléfono que no tenga 10 dígitos. | `400 Bad Request` disparado por las validaciones de entrada en el DTO. | La petición se frena en el controlador mediante `@Valid` antes de tocar la base de datos. |
 
 ---
 
 #### 3. Comprobación del orden de validación y de la atomicidad ante fallas
 
 * **Comprobación del orden estricto:**  
-  Configuramos pruebas donde el request contiene varias fallas al mismo tiempo (por ejemplo, franja llena y simultáneamente un barbero sin especialidad). En el assert verificamos que la respuesta devuelva únicamente el error del primer paso (`E01 - Franja llena`). Usando Mockito sobre los colaboradores, validamos con `verifyNoInteractions()` o `verify(..., never())` que los métodos correspondientes a las validaciones posteriores nunca llegaron a ejecutarse.
+  Montamos pruebas donde el request contiene varias fallas al mismo tiempo, como mandar una franja llena y a la vez un barbero sin especialidad. En el assert verificamos que la API retorne únicamente el error del primer paso, que es franja llena E01. Con Mockito comprobamos que los métodos de las validaciones posteriores y el repositorio de reservas nunca llegaron a ejecutarse.
 
 * **Comprobación de no creación y no modificación:**  
-  En las pruebas de fallo, antes de disparar la petición capturamos el conteo de reservas en base de datos y el estado actual del turno. Al recibir la respuesta de error (400, 409 o 422), consultamos nuevamente MongoDB y comprobamos que:
-  - El conteo de documentos en la colección de reservas no cambió.
-  - El documento del turno sigue teniendo exactamente el estado `DISPONIBLE`.
-  - Si la falla ocurre a mitad del servicio, la anotación `@Transactional` revierte cualquier cambio pendiente, garantizando consistencia total.
+  En las pruebas de rechazo, antes de enviar la petición consultamos el conteo de reservas y el estado del turno. Luego de recibir el error 400, 409 o 422, verificamos de nuevo en MongoDB:
+  - El conteo de reservas se mantiene igual.
+  - El turno conserva su estado `DISPONIBLE`.
+  - Si la falla ocurre a mitad del flujo, `@Transactional` revierte cualquier cambio intermedio, garantizando que nada quede a medias.
 
 ---
 
@@ -380,26 +380,27 @@ Explique cómo comprobaría que se respeta el orden y que, ante una falla, no se
 #### a. Evidencia del cumplimiento de reglas de negocio y alcance de pruebas unitarias
 
 * **Cómo las pruebas aportan evidencia:**  
-  Las pruebas automatizadas funcionan como especificaciones vivas del sistema. Cada regla del contrato queda plasmada en un caso de prueba ejecutable. Cuando el pipeline de CI/CD corre `mvn test`, genera reportes objetivos (Surefire y JaCoCo) que demuestran que el sistema reacciona exactamente como exige el negocio ante datos correctos y erróneos, sirviendo como evidencia técnica auditable.
+  Las pruebas automatizadas sirven como especificaciones vivas del sistema. Cada regla del contrato queda asegurada en un test ejecutable. Cuando el pipeline corre `mvn test` en cada push o PR, los reportes de ejecución demuestran con hechos que la API responde tal como espera el negocio ante datos válidos y casos de error.
 
 * **Qué se verifica puntualmente con pruebas unitarias:**  
-  Se valida la lógica pura de negocio en aislamiento, simulando con mocks la base de datos y servicios externos:
-  - Que los métodos validadores arrojen la excepción de dominio correspondiente ante condiciones inválidas (como fechas pasadas o barberos sin especialidad).
-  - Que la transición de estados en el modelo `Turno` solo permita transiciones válidas (`DISPONIBLE` a `OCUPADO`).
-  - Que los mappers transformen correctamente los campos entre DTOs, entidades y modelos de dominio sin perder datos ni truncar valores.
-  - Que la secuencia de validaciones en la capa de servicio se detenga en el primer fallo sin invocar el guardado en el repositorio.
+  Se prueba la lógica pura en aislamiento total, usando mocks para no depender de la base de datos ni de servicios externos:
+  - Que los validadores lancen la excepción de dominio correspondiente ante datos inválidos, como un barbero sin la especialidad requerida.
+  - Que el modelo `Turno` solo permita transiciones válidas de `DISPONIBLE` a `OCUPADO`.
+  - Que los mappers transformen los DTOs y entidades de dominio sin perder información.
+  - Que el servicio corte la ejecución en el primer fallo y no llame al repositorio de reservas.
 
 ---
 
 #### b. ¿Las pruebas por sí solas garantizan la ausencia de errores?
 
-No. Las pruebas demuestran la presencia de defectos conocidos, pero no pueden garantizar la ausencia total de errores en un software.
+No. Las pruebas demuestran que hay defectos cuando fallan, pero no pueden garantizar que el software esté 100% libre de errores.
 
 * **Justificación técnica:**  
-  Una suite de pruebas, incluso alcanzando altos porcentajes de cobertura de código, solo puede evaluar los escenarios y casos de borde que los desarrolladores y QA previeron al escribirlas. No cubre situaciones imprevistas del entorno real como:
-  - Condiciones de carrera y concurrencia extrema cuando cientos de usuarios intentan reservar el mismo turno en el mismo milisegundo.
-  - Comportamientos atípicos de infraestructura, como caídas de red, latencias altas o saturación del pool de conexiones a MongoDB.
-  - Malentendidos en los requerimientos originales: el código puede pasar todas sus pruebas en verde porque cumple la lógica programada, pero esa lógica podría estar resolviendo una necesidad equivocada del cliente.
+  Una suite de pruebas, incluso con cobertura alta, solo valida los casos que el equipo llegó a imaginar y programar en los tests. Quedan por fuera factores del entorno real como:
+  - Condiciones de carrera cuando muchos usuarios compiten por el mismo turno en el mismo milisegundo.
+  - Problemas de infraestructura, caídas de red o saturación del pool de conexiones en MongoDB.
+  - Requerimientos mal entendidos desde el inicio: el código puede tener todos sus tests en verde porque cumple lo programado, pero lo programado no era lo que el negocio realmente necesitaba.
   
-  Por este motivo, las pruebas automatizadas deben complementarse con análisis estático de código (SonarQube), pruebas de carga y monitoreo continuo en producción mediante logs estructurados y métricas de salud.
+  Por eso los tests automatizados deben complementarse con análisis estático en SonarQube, pruebas de carga y monitoreo continuo con métricas y logs en producción.
+
 
