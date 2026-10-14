@@ -212,15 +212,55 @@ Secrets usados: `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`, `AZURE_CREDENTIALS`, `A
 
 #### Diagrama de componentes general
 
-![Diagrama de componentes general](docs/images/ComponentsGeneral.png)
+![Diagrama de componentes general](docs/uml/DiagramaComponentesGeneral.png)
+
+* **Descripción breve:**
+  Representa la arquitectura de alto nivel del sistema para Bob's Barber, evidenciando un modelo cliente-servidor desacoplado compuesto por tres componentes principales: el Front-End (aplicación cliente/SPA encargada de la interfaz gráfica y experiencia de usuario), el Back-End (API REST desarrollada con Spring Boot que encapsula la lógica de negocio, reglas de reserva y servicios) y el subsistema de persistencia de datos (Base de datos NoSQL MongoDB).
+* **Justificación técnica:**
+  * **Desacoplamiento estructural y separación de responsabilidades (SoC):** El Front-End no interactúa ni tiene acceso directo a la base de datos; delega todas las operaciones y consultas a la API Back-End a través de interfaces REST provistas/requeridas (notación Lollipop & Socket).
+  * **Protocolo y contrato sin estado (Stateless):** La comunicación se realiza mediante HTTP/HTTPS con intercambio de mensajes en formato JSON y autenticación basada en tokens JWT, garantizando que el Back-End pueda escalar horizontalmente de forma independiente a la interfaz de usuario.
+  * **Seguridad y persistencia centralizada:** El Back-End es el único componente autorizado para establecer conexión con el clúster de MongoDB, aislando las credenciales, conexiones y reglas de consistencia de datos de cara al exterior.
 
 #### Diagrama de componentes específico siguiendo el esquema de MVC.
 
-![Diagrama de componentes específico siguiendo el esquema de MVC](docs/images/DiagramComponentEspecific.png)
+![Diagrama de componentes específico siguiendo el esquema de MVC](docs/uml/DiagramaComponentesEspecificos.png)
+
+##### Vistas de detalle para mayor visibilidad y legibilidad:
+
+* **Detalle Capa Controller, Capa Mapper IN y Capa Service:**
+  ![Detalle Controladores y Servicios](docs/uml/DiagramComponentsPart01.png)
+
+* **Detalle Capa Mapper OUT, Capa Repository, Capa Validator y Configuración:**
+  ![Detalle Mappers, Repositorios, Validadores y Configuración](docs/uml/DiagramComponentsPart02.png)
+
+* **Descripción breve:**
+  Descompone internamente la arquitectura del Back-End en capas lógicas estrictas basadas en el patrón Modelo-Vista-Controlador (MVC) extendido para APIs REST. Se organizan los componentes en: Capa Controller (adaptadores REST y manejador global de excepciones), Capa Mapper IN (transformación de DTOs de entrada al dominio), Capa Service (orquestación de casos de uso del negocio), Capa Validator (evaluación de reglas de negocio con corte inmediato), Capa Mapper OUT (transformación de dominio a entidades de persistencia y DTOs de salida), Capa Repository (acceso y consultas sobre MongoDB con Spring Data) y el módulo transversal Config & Util (seguridad JWT/RBAC, documentación OpenAPI/Swagger, utilidades de fecha y data seeding).
+* **Justificación técnica:**
+  * **Controladores ligeros y desacoplados:** Los controladores (`AuthController`, `TurnoController`, `ReservaController`, etc.) actúan únicamente como puntos de entrada HTTP, delegando el procesamiento sin contener reglas de negocio ni acceso a datos, garantizando alta cohesión y bajo acoplamiento.
+  * **Aislamiento perimetral mediante Mappers (In/Out):** Se evita el antipatrón de exponer entidades de persistencia directamente al cliente. `Mapper IN` convierte las peticiones externas (`Request DTO`) en objetos de negocio limpios; `Mapper OUT` transforma entidades de dominio a entidades de base de datos (`*Entity`) o respuestas hacia el cliente (`Response DTO`), permitiendo cambiar la estructura de la base de datos o de los endpoints sin afectar la lógica interna.
+  * **Capa Service como orquestador del caso de uso:** Concentra la lógica del negocio (ej. coordinación del flujo de reserva, sumatoria de precios de servicios y transiciones de estado) e inyecta sus dependencias (validadores, repositorios y utilidades) por constructor mediante inversión de control (IoC).
+  * **Capa Validator con estrategia Fail-Fast:** Aísla las reglas de negocio complejas (aforo de franjas $\le 3$, compatibilidad de especialidades y datos del cliente) del flujo del servicio. Al estructurarse de forma modular y secuencial, si una validación falla, el flujo se detiene inmediatamente y arroja la excepción correspondiente, evitando escrituras parciales o inconsistentes en la base de datos.
+  * **Manejo uniforme de errores transversales:** Se incluye `GlobalExceptionHandler` (`@RestControllerAdvice`) para interceptar excepciones de negocio y de validación en un único punto, garantizando respuestas estandarizadas con códigos HTTP semánticos (400, 401, 403, 404, 409, 422).
 
 #### Diagrama de clases
 
-![Diagrama de clases](docs/images/DiagramClass.png)
+![Diagrama de clases - Modelos de Dominio](docs/uml/DiagramaDeClases.png)
+
+##### Vistas de detalle para mayor visibilidad y legibilidad:
+
+* **Detalle Entidades de Dominio, Objetos de Valor y Enums:**
+  ![Detalle Entidades de Dominio](docs/uml/DiagramClassPart01.png)
+
+* **Detalle Patrones de Diseño (Chain of Responsibility, Strategy y Builder):**
+  ![Detalle Patrones de Diseño](docs/uml/DiagramClassPart02.png)
+
+* **Descripción breve:**
+  Modela la estructura del dominio del problema para Bob's Barber aplicando Programación Orientada a Objetos (POO) y Principios SOLID. Identifica las entidades principales del negocio (`Usuario`, `Reserva`, `Turno`, `Barbero`, `Servicio`), sus objetos de valor y enumeraciones (`RolUsuario`, `EstadoReserva`, `EstadoTurno`, `HorarioDisponibilidad`, `Especialidad`), e incorpora tres patrones de diseño de software GoF: *Chain of Responsibility* para la cadena secuencial de validaciones, *Strategy* para la asignación dinámica de barberos según especialidad y disponibilidad, y *Builder* para la construcción robusta e inmutable de reservas complejas.
+* **Justificación técnica:**
+  * **Separación entre Entidades con ciclo de vida y Objetos de Valor:** Entidades como `Turno` y `Reserva` gestionan su propia identidad y transiciones de estado mediante métodos encapsulados (`ocupar()`, `liberar()`, `confirmar()`, `cancelar()`, `calcularTotal()`). `HorarioDisponibilidad` actúa como un Value Object inmutable que encapsula la lógica temporal (`incluye(dia, hora)`), desacoplando los días y rangos horarios del barbero.
+  * **Patrón Chain of Responsibility (Cadena de Responsabilidad):** Utilizado para implementar la cadena de 5 validaciones requerida por el caso de estudio (Disponibilidad de franja, Catálogo de servicios, Especialidad del barbero, Datos del cliente). A través de la clase base abstracta `AbstractValidadorReservaHandler` y sus handlers concretos, cada validador ejecuta su verificación y, en caso exitoso, delega al siguiente handler (`checkNext()`). Si una condición no se cumple, interrumpe el flujo (*fail-fast*) y lanza el error correspondiente sin acoplar los validadores entre sí ni sobrecargar el servicio de reservas.
+  * **Patrón Strategy (Estrategia):** Permite resolver el requerimiento de negocio donde un cliente solicita un turno sin preferencia de barbero y el sistema debe asignar automáticamente uno disponible con la especialidad requerida. La interfaz `AsignacionBarberoStrategy` abstrae la regla de selección, y la clase `AsignacionPorEspecialidadStrategy` implementa la búsqueda y filtrado de barberos libres, facilitando la incorporación de nuevas estrategias en el futuro (ej. balanceo de carga o calificación) sin alterar el dominio.
+  * **Patrón Builder (Constructor):** Dado que la creación de una `Reserva` involucra múltiples asociaciones obligatorias (identificador de turno, cliente, barbero asignado y lista de servicios), `ReservaBuilder` garantiza la creación segura y consistente del objeto, validando invariantes antes de su construcción y evitando constructores telescópicos.
 
 ### Preguntas para la revisión con Arquitectura:
 
