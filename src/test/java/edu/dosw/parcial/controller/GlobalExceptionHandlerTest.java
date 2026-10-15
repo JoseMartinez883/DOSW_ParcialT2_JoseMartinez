@@ -119,5 +119,6 @@ class GlobalExceptionHandlerTest {
         // Assert
         assertEquals(HttpStatus.INTERNAL_SERVER_ERROR, response.getStatusCode());
         assertEquals("E_ERROR_INTERNO", response.getBody().getCodigo());
+        assertEquals("Ocurrió un error interno en el servidor. Por favor intente más tarde.", response.getBody().getMensaje());
     }
 }
