@@ -3,8 +3,6 @@ package edu.dosw.parcial.core;
 import edu.dosw.parcial.controller.dtos.request.CrearTurnoRequest;
 import edu.dosw.parcial.controller.dtos.response.TurnoResponse;
 import edu.dosw.parcial.controller.mappers.TurnoDtoMapper;
-import edu.dosw.parcial.core.models.EstadoTurno;
-import edu.dosw.parcial.core.models.Turno;
 import edu.dosw.parcial.core.models.exception.BusinessException;
 import edu.dosw.parcial.core.services.TurnoServiceImpl;
 import edu.dosw.parcial.persistence.entities.BarberoEntity;
@@ -129,7 +127,7 @@ class TurnoServiceImplTest {
                 .hora("10:00")
                 .build();
 
-        // Act & Assert
+        // Act y Assert
         BusinessException ex = assertThrows(BusinessException.class, () -> turnoService.crearTurno(request));
         assertEquals("E_FORMATO_FECHA", ex.getCodigo());
         assertEquals(HttpStatus.BAD_REQUEST, ex.getStatus());
@@ -145,7 +143,7 @@ class TurnoServiceImplTest {
                 .hora("hora-invalida")
                 .build();
 
-        // Act & Assert
+        // Act y Assert
         BusinessException ex = assertThrows(BusinessException.class, () -> turnoService.crearTurno(request));
         assertEquals("E_FORMATO_HORA", ex.getCodigo());
         assertEquals(HttpStatus.BAD_REQUEST, ex.getStatus());
@@ -163,7 +161,7 @@ class TurnoServiceImplTest {
 
         when(barberoRepository.findByNombreIgnoreCase("Inexistente")).thenReturn(Optional.empty());
 
-        // Act & Assert
+        // Act y Assert
         BusinessException ex = assertThrows(BusinessException.class, () -> turnoService.crearTurno(request));
         assertEquals("E_BARBERO_NO_ENCONTRADO", ex.getCodigo());
         assertEquals(HttpStatus.NOT_FOUND, ex.getStatus());
@@ -204,5 +202,23 @@ class TurnoServiceImplTest {
         BusinessException ex = assertThrows(BusinessException.class, () -> turnoService.crearTurno(request));
         assertEquals("E_TURNO_DUPLICADO", ex.getCodigo());
         assertEquals(HttpStatus.CONFLICT, ex.getStatus());
+    }
+
+    @Test
+    @DisplayName("Debe rechazar con 422 si la franja horaria de 1 hora desborda la hora fin de la jornada del barbero")
+    void crearTurno_SlotExceedsClosingTime_ThrowsUnprocessableEntity() {
+        // Arrange: Miguel atiende hasta las 20:00; un turno que inicia a las 20:00 termina hasta las 21:00
+        CrearTurnoRequest request = CrearTurnoRequest.builder()
+                .barberoNombre("Miguel")
+                .fecha(futureDate)
+                .hora("20:00")
+                .build();
+
+        when(barberoRepository.findByNombreIgnoreCase("Miguel")).thenReturn(Optional.of(barberoMiguel));
+
+        // Act y Assert
+        BusinessException ex = assertThrows(BusinessException.class, () -> turnoService.crearTurno(request));
+        assertEquals("E_FUERA_DE_HORARIO", ex.getCodigo());
+        assertEquals(HttpStatus.UNPROCESSABLE_ENTITY, ex.getStatus());
     }
 }

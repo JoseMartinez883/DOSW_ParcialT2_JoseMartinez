@@ -6,6 +6,7 @@ import edu.dosw.parcial.controller.dtos.response.ReservaResponse;
 import edu.dosw.parcial.controller.mappers.ReservaDtoMapper;
 import edu.dosw.parcial.core.models.exception.BusinessException;
 import edu.dosw.parcial.core.services.ReservaServiceImpl;
+import edu.dosw.parcial.core.validators.ClienteValidator;
 import edu.dosw.parcial.persistence.entities.BarberoEntity;
 import edu.dosw.parcial.persistence.entities.ReservaEntity;
 import edu.dosw.parcial.persistence.entities.ServicioEntity;
@@ -57,6 +58,9 @@ class ReservaServiceImplTest {
 
     @Spy
     private ReservaDtoMapper reservaDtoMapper = new ReservaDtoMapper();
+
+    @Spy
+    private ClienteValidator clienteValidator = new ClienteValidator();
 
     @InjectMocks
     private ReservaServiceImpl reservaService;
@@ -337,5 +341,105 @@ class ReservaServiceImplTest {
         assertEquals("DISPONIBLE", turnoLaura.getEstado());
         verify(turnoRepository).save(turnoMiguel);
         verify(turnoRepository, never()).save(turnoLaura);
+    }
+
+    @Test
+    @DisplayName("Debe priorizar E01 (franja llena) sobre E03 cuando la franja está al límite y el nombre del cliente viene vacío")
+    void pedirTurno_FranjaLlenaYNombreVacio_PriorizaE01SobreE03() {
+        // Arrange
+        validRequest.getCliente().setNombre("   "); // Nombre inválido
+        when(reservaRepository.countByFechaAndHoraAndEstado("2026-10-25", "10:00", "CONFIRMADA")).thenReturn(3L);
+
+        // Act y Assert: Debe fallar en la Validación 1 (E01) y no en la Validación 3 (E03)
+        BusinessException ex = assertThrows(BusinessException.class, () -> reservaService.pedirTurno(validRequest));
+        assertEquals("E01", ex.getCodigo());
+        assertEquals(HttpStatus.CONFLICT, ex.getStatus());
+        verify(reservaRepository, never()).save(any());
+        verify(turnoRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("Debe priorizar E02 (especialidad incompatible) sobre E07 cuando el barbero no domina el servicio y el teléfono es inválido")
+    void pedirTurno_BarberoSinEspecialidadYTelefonoInvalido_PriorizaE02SobreE07() {
+        // Arrange: Teléfono con 5 dígitos (inválido), barbero no tiene CORTE
+        validRequest.getCliente().setTelefono("12345");
+        BarberoEntity barberoSinCorte = BarberoEntity.builder()
+                .id("b2")
+                .nombre("Laura")
+                .especialidades(List.of("CEJAS", "CAPILAR"))
+                .activo(true)
+                .build();
+        TurnoEntity turno = TurnoEntity.builder()
+                .id("t2")
+                .barberoNombre("Laura")
+                .fecha("2026-10-25")
+                .hora("10:00")
+                .estado("DISPONIBLE")
+                .build();
+
+        when(reservaRepository.countByFechaAndHoraAndEstado("2026-10-25", "10:00", "CONFIRMADA")).thenReturn(0L);
+        when(turnoRepository.findByFechaAndHoraAndEstado("2026-10-25", "10:00", "DISPONIBLE")).thenReturn(List.of(turno));
+        when(barberoRepository.findByNombreIgnoreCase("Laura")).thenReturn(Optional.of(barberoSinCorte));
+        when(servicioRepository.findByCodigo("SER-001")).thenReturn(Optional.of(servicioCorte));
+
+        // Act y Assert: Debe fallar en Validación 2 (E02) antes de evaluar datos del cliente (E07)
+        BusinessException ex = assertThrows(BusinessException.class, () -> reservaService.pedirTurno(validRequest));
+        assertEquals("E02", ex.getCodigo());
+        assertEquals(HttpStatus.UNPROCESSABLE_ENTITY, ex.getStatus());
+        verify(reservaRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("Debe rechazar con E03 cuando la franja y barbero son válidos pero el nombre es vacío o espacios")
+    void pedirTurno_ValidacionesPasanPeroNombreVacio_ThrowsE03() {
+        // Arrange
+        validRequest.getCliente().setNombre("   ");
+        when(reservaRepository.countByFechaAndHoraAndEstado("2026-10-25", "10:00", "CONFIRMADA")).thenReturn(0L);
+        when(turnoRepository.findByFechaAndHoraAndEstado("2026-10-25", "10:00", "DISPONIBLE")).thenReturn(List.of(availableTurno));
+        when(barberoRepository.findByNombreIgnoreCase("Miguel")).thenReturn(Optional.of(barberoMiguel));
+        when(servicioRepository.findByCodigo("SER-001")).thenReturn(Optional.of(servicioCorte));
+
+        // Act y Assert
+        BusinessException ex = assertThrows(BusinessException.class, () -> reservaService.pedirTurno(validRequest));
+        assertEquals("E03", ex.getCodigo());
+        assertEquals(HttpStatus.BAD_REQUEST, ex.getStatus());
+        verify(reservaRepository, never()).save(any());
+        verify(turnoRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("Debe rechazar con E07 cuando la franja y barbero son válidos pero el teléfono no tiene 10 dígitos")
+    void pedirTurno_ValidacionesPasanPeroTelefonoInvalido_ThrowsE07() {
+        // Arrange
+        validRequest.getCliente().setTelefono("300123");
+        when(reservaRepository.countByFechaAndHoraAndEstado("2026-10-25", "10:00", "CONFIRMADA")).thenReturn(0L);
+        when(turnoRepository.findByFechaAndHoraAndEstado("2026-10-25", "10:00", "DISPONIBLE")).thenReturn(List.of(availableTurno));
+        when(barberoRepository.findByNombreIgnoreCase("Miguel")).thenReturn(Optional.of(barberoMiguel));
+        when(servicioRepository.findByCodigo("SER-001")).thenReturn(Optional.of(servicioCorte));
+
+        // Act y Assert
+        BusinessException ex = assertThrows(BusinessException.class, () -> reservaService.pedirTurno(validRequest));
+        assertEquals("E07", ex.getCodigo());
+        assertEquals(HttpStatus.BAD_REQUEST, ex.getStatus());
+        verify(reservaRepository, never()).save(any());
+        verify(turnoRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("Debe rechazar con E08 cuando la franja y barbero son válidos pero el correo no es @gmail.com")
+    void pedirTurno_ValidacionesPasanPeroCorreoInvalido_ThrowsE08() {
+        // Arrange
+        validRequest.getCliente().setCorreo("juan@hotmail.com");
+        when(reservaRepository.countByFechaAndHoraAndEstado("2026-10-25", "10:00", "CONFIRMADA")).thenReturn(0L);
+        when(turnoRepository.findByFechaAndHoraAndEstado("2026-10-25", "10:00", "DISPONIBLE")).thenReturn(List.of(availableTurno));
+        when(barberoRepository.findByNombreIgnoreCase("Miguel")).thenReturn(Optional.of(barberoMiguel));
+        when(servicioRepository.findByCodigo("SER-001")).thenReturn(Optional.of(servicioCorte));
+
+        // Act y Assert
+        BusinessException ex = assertThrows(BusinessException.class, () -> reservaService.pedirTurno(validRequest));
+        assertEquals("E08", ex.getCodigo());
+        assertEquals(HttpStatus.BAD_REQUEST, ex.getStatus());
+        verify(reservaRepository, never()).save(any());
+        verify(turnoRepository, never()).save(any());
     }
 }
