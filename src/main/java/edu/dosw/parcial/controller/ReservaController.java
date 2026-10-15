@@ -60,7 +60,7 @@ public class ReservaController {
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
-    @org.springframework.web.bind.annotation.GetMapping("/me")
+    @org.springframework.web.bind.annotation.GetMapping({"/me", "/mis-reservas"})
     @PreAuthorize("hasRole('CLIENTE')")
     @Operation(summary = "Consultar mis reservas", description = "Consulta únicamente las reservas del cliente autenticado, ordenadas por fecha y hora de manera descendente. Requiere rol CLIENTE.")
     @ApiResponses(value = {

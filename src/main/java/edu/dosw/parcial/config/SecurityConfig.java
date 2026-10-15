@@ -67,7 +67,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/v1/turnos").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.GET, "/api/v1/reservas").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.POST, "/api/v1/reservas").hasRole("CLIENTE")
-                        .requestMatchers(HttpMethod.GET, "/api/v1/reservas/me").hasRole("CLIENTE")
+                        .requestMatchers(HttpMethod.GET, "/api/v1/reservas/me", "/api/v1/reservas/mis-reservas").hasRole("CLIENTE")
                         .anyRequest().authenticated())
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
                 .build();
