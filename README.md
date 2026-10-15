@@ -674,3 +674,211 @@ La diferencia radica en el público objetivo y en la seguridad de la informació
   Está hecho para el usuario final o el frontend. Debe ser seguro, claro y amigable, entregando únicamente el código HTTP correspondiente y un mensaje funcional como franja sin cupos disponibles o correo con formato incorrecto.
 
 Nunca se debe exponer el error técnico interno al cliente porque revelar nombres de tecnologías, versiones de librerías o estructuras de base de datos le da pistas valiosas a atacantes para encontrar vulnerabilidades en el sistema.
+
+---
+
+# Fase de Implementación — Parte Práctica Consolidación del diseño
+
+## 1. Estrategia de Ramas y Flujo Git
+
+Para garantizar la trazabilidad y el aislamiento de cada funcionalidad, cada uno de los 5 casos de uso fue desarrollado en una rama dedicada bajo el patrón `feature/<caso-de-uso>`, completando su flujo integral (Controlador, DTOs, Mappers, Servicio, Modelo, Repositorio MongoDB y Pruebas Unitarias), antes de integrarse sobre `develop` y eliminar la rama correspondiente:
+
+| Caso de Uso | Rama Feature | Commits Atómicos | Integración en `develop` | Estado de la Rama |
+|---|---|---|---|---|
+| **Iniciar sesión** | `feature/iniciar-sesion` | `feat(auth): implement user authentication with JWT generation and password hashing`<br>`test(auth): add unit tests for authentication flow and JWT validation`<br>`config(security): configure Spring Security filter chain and JWT authentication filter` | Merge commit `b951f3d` | Fusionada en `develop` y borrada |
+| **Crear turno** | `feature/crear-turno` | `feat(turnos): implement slot creation endpoint with barber availability rules`<br>`test(turnos): add unit tests for turno creation validation rules` | Merge commit `6d5b955` | Fusionada en `develop` y borrada |
+| **Pedir un turno** | `feature/pedir-turno` | `feat(reservas): implement reservation request with strict short-circuit validation chain`<br>`test(reservas): add unit tests verifying short-circuit validation and slot occupation` | Merge commit `965f49d` | Fusionada en `develop` y borrada |
+| **Consultar mis reservas** | `feature/consultar-mis-reservas` | `feat(reservas): implement authenticated client reservations retrieval`<br>`test(reservas): add unit tests for client reservations query with descending order` | Merge commit `7bd5ec4` | Fusionada en `develop` y borrada |
+| **Consultar todas las reservas** | `feature/consultar-todas-reservas` | `feat(reservas): implement admin reservations inspection endpoint`<br>`test(reservas): add unit tests for admin reservations auditing` | Merge commit `d9c3dce` | Fusionada en `develop` y borrada |
+| **Consolidación de pruebas y docs** | `develop` | `test(coverage): consolidate persistence mappers and initializer tests reaching 88% JaCoCo coverage`<br>`docs: update README with implementation phase evidences and technical specs` | Directo en `develop` | Ramas consolidadas en `origin/develop` |
+
+### Historial de integración en Git:
+
+```text
+* 9acd504 test(coverage): consolidate persistence mappers and initializer tests reaching 88% JaCoCo coverage
+*   d9c3dce Merge branch 'feature/consultar-todas-reservas' into develop
+|\  
+| * c6d8f3d test(reservas): add unit tests for admin reservations auditing
+| * ba85622 feat(reservas): implement admin reservations inspection endpoint
+|/  
+*   7bd5ec4 Merge branch 'feature/consultar-mis-reservas' into develop
+|\  
+| * fa2aa40 test(reservas): add unit tests for client reservations query with descending order
+| * 799995e feat(reservas): implement authenticated client reservations retrieval
+|/  
+*   965f49d Merge branch 'feature/pedir-turno' into develop
+|\  
+| * a60fa21 test(reservas): add unit tests verifying short-circuit validation and slot occupation
+| * c7a0e5c feat(reservas): implement reservation request with strict short-circuit validation chain
+|/  
+*   6d5b955 Merge branch 'feature/crear-turno' into develop
+|\  
+| * e292290 test(turnos): add unit tests for turno creation validation rules
+| * afc2896 feat(turnos): implement slot creation endpoint with barber availability rules
+|/  
+*   b951f3d Merge branch 'feature/iniciar-sesion' into develop
+|\  
+| * 0367b44 config(security): configure Spring Security filter chain and JWT authentication filter
+| * f10722b test(auth): add unit tests for authentication flow and JWT validation
+| * 8aa0c82 feat(auth): implement user authentication with JWT generation and password hashing
+|/  
+* 787b5ac Fix formatting issues in README.md
+```
+
+---
+
+## 2. Inyección de Dependencias por Constructor
+
+Siguiendo las mejores prácticas de Spring Framework y los principios de diseño de software limpio:
+- Todos los controladores (`AuthController`, `TurnoController`, `ReservaController`) y servicios administrados (`AuthServiceImpl`, `TurnoServiceImpl`, `ReservaServiceImpl`) implementan **inyección de dependencias por constructor explícito**.
+- Todos los colaboradores inyectados se declaran como atributos `private final`, garantizando **inmutabilidad** y evitando estados inconsistentes o dependencias nulas.
+- Esta separación de responsabilidades facilita la instanciación directa de las clases en las pruebas unitarias con mocks (`Mockito`), eliminando la necesidad de levantar el contexto pesado de Spring Boot.
+
+Ejemplo en [`TurnoServiceImpl.java`](src/main/java/edu/dosw/parcial/core/services/TurnoServiceImpl.java):
+```java
+@Slf4j
+@Service
+public class TurnoServiceImpl implements TurnoService {
+
+    private final TurnoRepository turnoRepository;
+    private final BarberoRepository barberoRepository;
+    private final TurnoPersistenceMapper turnoPersistenceMapper;
+    private final TurnoDtoMapper turnoDtoMapper;
+
+    public TurnoServiceImpl(
+            TurnoRepository turnoRepository,
+            BarberoRepository barberoRepository,
+            TurnoPersistenceMapper turnoPersistenceMapper,
+            TurnoDtoMapper turnoDtoMapper) {
+        this.turnoRepository = turnoRepository;
+        this.barberoRepository = barberoRepository;
+        this.turnoPersistenceMapper = turnoPersistenceMapper;
+        this.turnoDtoMapper = turnoDtoMapper;
+    }
+    // ...
+}
+```
+
+---
+
+## 3. Implementación de los 5 Casos de Uso (Flujo Completo)
+
+Cada caso de uso implementa el ciclo de vida completo: validación sintáctica de DTOs con Bean Validation (`@Valid`), enrutamiento REST con Spring Security, reglas de negocio en la capa Core y persistencia en MongoDB.
+
+### 1. Iniciar sesión (`POST /api/v1/auth/login`)
+- **Acceso:** Público (sin token).
+- **Entrada:** `LoginRequest` con correo y contraseña.
+- **Lógica:** Valida la existencia del usuario en `UsuarioRepository` y comprueba la contraseña cifrada mediante `BCryptPasswordEncoder`. Al autenticar exitosamente, genera un token JWT firmado (JJWT) que encapsula el correo y el rol (`CLIENTE` o `ADMIN`).
+- **Respuesta:** `200 OK` con `AuthResponse` (`token`, `tipoToken: "Bearer"`, `usuario`, `rol`).
+- **Errores:** `401 Unauthorized` si las credenciales son incorrectas o el usuario no existe.
+
+### 2. Crear turno (`POST /api/v1/turnos`)
+- **Acceso:** Protegido con rol `ADMIN` (`@PreAuthorize("hasRole('ADMIN')")`).
+- **Entrada:** `CrearTurnoRequest` (`barberoId`, `fecha: YYYY-MM-DD`, `hora: HH:mm`).
+- **Lógica:** 
+  1. Valida que el barbero exista en MongoDB.
+  2. Valida que la fecha sea futura (`LocalDate.parse(fecha).isAfter(hoy)`).
+  3. Valida que la hora se encuentre dentro de la jornada laboral del barbero (`08:00 - 20:00`).
+  4. Valida que no exista un turno duplicado para el mismo barbero en esa fecha y hora.
+  5. Persiste el turno en MongoDB con estado inicial `DISPONIBLE`.
+- **Respuesta:** `201 Created` con `TurnoResponse`.
+- **Errores:** `400 Bad Request` (formato inválido), `409 Conflict` (turno duplicado), `422 Unprocessable Entity` (fecha no futura o fuera de jornada).
+
+### 3. Pedir un turno (`POST /api/v1/reservas`)
+- **Acceso:** Protegido para usuarios autenticados (`CLIENTE` o `ADMIN`).
+- **Entrada:** `CrearReservaRequest` (`clienteNombre`, `clienteCorreo`, `clienteTelefono`, `barberoId`, `fecha`, `hora`, `codigoServicio`).
+- **Cadena de validaciones en orden estricto (Short-Circuit):**
+  1. **Capacidad de franja (E01):** Verifica que la franja horaria no exceda el límite máximo de 3 reservas activas (`countByFechaAndHoraAndEstado(fecha, hora, "CONFIRMADA") >= 3`). Si está llena, lanza `ConflictException` (`409 Conflict`, código `E01`).
+  2. **Disponibilidad de turno y barbero activo (E03 / E02):**
+     - Busca un turno para el barbero en esa fecha y hora con estado `DISPONIBLE`. Si no existe o el barbero no está activo, lanza `ConflictException` (`409 Conflict`, código `E03`).
+     - Comprueba que el barbero posea en su catálogo de especialidades el servicio requerido. Si no lo domina, lanza `BusinessValidationException` (`422 Unprocessable Entity`, código `E02`).
+  3. **Existencia del servicio en catálogo (E09):** Consulta el servicio en `ServicioRepository`. Si no existe, lanza `ResourceNotFoundException` (`404 Not Found`, código `E09`).
+  4. **Creación atómica de la reserva:** Solo si **todas** las validaciones previas son superadas con éxito:
+     - El turno cambia su estado a `OCUPADO` y se actualiza en MongoDB.
+     - Se persiste la nueva reserva con estado `CONFIRMADA`, calculando el total a pagar según el precio oficial del catálogo.
+- **Respuesta:** `201 Created` con `ReservaResponse` con identificador único y estado `CONFIRMADA`.
+
+### 4. Consultar mis reservas (`GET /api/v1/reservas/me`)
+- **Acceso:** Protegido para clientes autenticados.
+- **Lógica:** Extrae la identidad del usuario a partir del token JWT autenticado (`SecurityContextHolder`), busca sus reservas en `ReservaRepository` ordenadas por fecha/hora y las mapea al DTO de salida.
+- **Respuesta:** `200 OK` con lista de `ReservaResponse`.
+
+### 5. Consultar todas las reservas (`GET /api/v1/reservas`)
+- **Acceso:** Protegido exclusivamente para rol `ADMIN` (`@PreAuthorize("hasRole('ADMIN')")`).
+- **Lógica:** Consulta la totalidad de reservas registradas en el sistema para auditoría y gestión de la barbería.
+- **Respuesta:** `200 OK` con lista completa de `ReservaResponse`.
+
+---
+
+## 4. Documentación con Swagger y OpenAPI 3
+
+La API cuenta con documentación viva generada mediante `springdoc-openapi-starter-webmvc-ui:2.5.0` y configurada en [`OpenApiConfig.java`](src/main/java/edu/dosw/parcial/config/OpenApiConfig.java):
+
+- **Esquema de Seguridad:** Configurado como HTTP `BearerAuth` con formato JWT.
+- **Botón `Authorize`:** Permite ingresar el token JWT obtenido en `/api/v1/auth/login`. Al ingresar el token (ejemplo: `eyJhbGci...`), Swagger UI inyecta automáticamente el encabezado `Authorization: Bearer <token>` en todas las peticiones a endpoints protegidos.
+- **Endpoints documentados:** Todos los 5 casos de uso cuentan con descripciones detalladas, códigos de respuesta HTTP (`200`, `201`, `400`, `401`, `403`, `404`, `409`, `422`) y ejemplos de esquemas JSON de entrada y salida.
+
+**Enlaces Swagger en producción:**
+- **Swagger UI:** https://dosw-parcial-josemartinez-f4hwgudtgwcqgdb8.westus3-01.azurewebsites.net/swagger-ui/index.html
+- **OpenAPI JSON Spec:** https://dosw-parcial-josemartinez-f4hwgudtgwcqgdb8.westus3-01.azurewebsites.net/v3/api-docs
+
+---
+
+## 5. Estrategia y Niveles de Logging
+
+El backend utiliza `@Slf4j` (SLF4J + Logback) con segregación estructurada de niveles de severidad en todas las capas:
+
+| Nivel | Cuándo se utiliza | Ejemplo en el código |
+|---|---|---|
+| `INFO` | Inicio de operaciones clave, recepción de peticiones en controladores, confirmación de reservas y turnos, inicios de sesión válidos. | `log.info("Reserva creada y confirmada exitosamente: id=[{}], barbero=[{}], total=[{}]", ...)` |
+| `WARN` | Rechazos de reglas de negocio esperadas y controladas (franja llena E01, especialidad no coincidente E02, barbero inactivo E03, credenciales inválidas). | `log.warn("Rechazo por franja llena (E01): [{}] reservas activas en fecha [{}]", ...)` |
+| `ERROR` | Excepciones no controladas o fallas de infraestructura en `GlobalExceptionHandler`. | `log.error("Excepción inesperada en el servidor: ", ex)` |
+
+> [!SECURITY]
+> **Protección de Datos Sensibles:** Ningún registro de log imprime contraseñas en texto plano, hashes de claves ni tokens JWT completos, cumpliendo con los estándares de privacidad y seguridad de la información.
+
+---
+
+## 6. Pruebas Unitarias y Cobertura (JUnit 5 + Mockito)
+
+Las pruebas unitarias fueron construidas bajo el patrón **Arrange, Act, Assert (AAA)**, cubriendo controladores, servicios centrales de lógica de negocio, generadores de tokens JWT y mappers de persistencia:
+
+### Resumen de Pruebas:
+- **Total de pruebas ejecutadas:** 42 tests
+- **Fallos (Failures):** 0
+- **Errores:** 0
+- **Tiempo de ejecución:** ~4.5 segundos
+
+```text
+[INFO] Results:
+[INFO] 
+[INFO] Tests run: 42, Failures: 0, Errors: 0, Skipped: 0
+[INFO] 
+[INFO] BUILD SUCCESS
+```
+
+### Cobertura de Código JaCoCo:
+- **Cobertura de Líneas (Line Coverage):** **88.51%** (516 de 583 líneas cubiertas)
+- **Cobertura de Instrucciones (Instruction Coverage):** **87.05%**
+- **Servicios Principales:**
+  - `ReservaServiceImpl`: **96.8%** de cobertura de instrucciones.
+  - `AuthServiceImpl`: **100%** de cobertura de instrucciones.
+  - `TurnoServiceImpl`: **94.0%** de cobertura de instrucciones.
+  - Mappers y Validadores: **100%** de cobertura.
+
+---
+
+## 7. Pipeline de CI/CD y Despliegue en Producción
+
+El flujo de entrega continua está automatizado mediante GitHub Actions en [`.github/workflows/ci-cd.yml`](.github/workflows/ci-cd.yml) y se ejecuta con cada integración en la rama `develop`:
+
+1. **Job `test`:** Descarga el código, levanta Java 21 LTS y ejecuta `mvn verify`, validando compilación, suite completa de 42 pruebas unitarias y generación de reportes JaCoCo.
+2. **Job `docker`:** Depende de `test`. Construye la imagen de contenedor Docker inmutable multietapa y realiza el push a Docker Hub (`josemartinez883/dosw-parcial-t2:latest`).
+3. **Job `deploy`:** Depende de `docker`. Autentica contra Microsoft Azure mediante Service Principal y despliega el contenedor en el recurso de Azure App Service.
+
+### Enlaces y Evidencias de Producción:
+- **URL Base en Producción (Azure App Service):** https://dosw-parcial-josemartinez-f4hwgudtgwcqgdb8.westus3-01.azurewebsites.net
+- **Health Check en Vivo:** https://dosw-parcial-josemartinez-f4hwgudtgwcqgdb8.westus3-01.azurewebsites.net/api/v1/health
+- **Swagger UI en Vivo:** https://dosw-parcial-josemartinez-f4hwgudtgwcqgdb8.westus3-01.azurewebsites.net/swagger-ui/index.html
+- **Repositorio GitHub:** https://github.com/JoseMartinez883/DOSW_ParcialT2_JoseMartinez
+
