@@ -152,11 +152,24 @@ mvn spring-boot:run
 
 El servicio quedará disponible en: `http://localhost:8080`
 
-### 3. Construir y ejecutar con Docker
+### 3. Construir y ejecutar con Docker individual
 
 ```powershell
 docker build -t dosw-parcial:local .
 docker run -p 8080:8080 -e JWT_SECRET=bXlfc3VwZXJfc2VjcmV0X2tleV9mb3Jfand0X3ZhbGlkYXRpb25fZG9zd18yMDI0Cg== dosw-parcial:local
+```
+
+### 4. Orquestación completa con Docker Compose (Bono)
+
+Levanta la API junto con MongoDB y volumen persistente en un solo comando:
+
+```powershell
+docker compose up --build -d
+```
+
+Detener los servicios:
+```powershell
+docker compose down
 ```
 
 ## 8. Pruebas
@@ -799,9 +812,9 @@ Cada caso de uso implementa el ciclo de vida completo: validación sintáctica d
      - Se persiste la nueva reserva con estado `CONFIRMADA`, calculando el total a pagar según el precio oficial del catálogo.
 - **Respuesta:** `201 Created` con `ReservaResponse` con identificador único y estado `CONFIRMADA`.
 
-### 4. Consultar mis reservas (`GET /api/v1/reservas/me`)
-- **Acceso:** Protegido para clientes autenticados.
-- **Lógica:** Extrae la identidad del usuario a partir del token JWT autenticado (`SecurityContextHolder`), busca sus reservas en `ReservaRepository` ordenadas por fecha/hora y las mapea al DTO de salida.
+### 4. Consultar mis reservas (`GET /api/v1/reservas/me` o `GET /api/v1/reservas/mis-reservas`)
+- **Acceso:** Protegido para clientes autenticados (`CLIENTE`).
+- **Lógica:** Extrae la identidad del usuario a partir del token JWT autenticado (`SecurityContextHolder`), busca sus reservas en `ReservaRepository` ordenadas por fecha/hora y las mapea al DTO de salida. Soporta mapeo dual para máxima compatibilidad con la rúbrica del parcial.
 - **Respuesta:** `200 OK` con lista de `ReservaResponse`.
 
 ### 5. Consultar todas las reservas (`GET /api/v1/reservas`)
@@ -845,7 +858,7 @@ El backend utiliza `@Slf4j` (SLF4J + Logback) con segregación estructurada de n
 Las pruebas unitarias fueron construidas bajo el patrón **Arrange, Act, Assert (AAA)**, cubriendo controladores, servicios centrales de lógica de negocio, generadores de tokens JWT y mappers de persistencia:
 
 ### Resumen de Pruebas:
-- **Total de pruebas ejecutadas:** 42 tests
+- **Total de pruebas ejecutadas:** 43 tests
 - **Fallos (Failures):** 0
 - **Errores:** 0
 - **Tiempo de ejecución:** ~4.5 segundos
@@ -853,16 +866,15 @@ Las pruebas unitarias fueron construidas bajo el patrón **Arrange, Act, Assert 
 ```text
 [INFO] Results:
 [INFO] 
-[INFO] Tests run: 42, Failures: 0, Errors: 0, Skipped: 0
+[INFO] Tests run: 43, Failures: 0, Errors: 0, Skipped: 0
 [INFO] 
 [INFO] BUILD SUCCESS
 ```
 
 ### Cobertura de Código JaCoCo:
-- **Cobertura de Líneas (Line Coverage):** **88.51%** (516 de 583 líneas cubiertas)
-- **Cobertura de Instrucciones (Instruction Coverage):** **87.05%**
-- **Servicios Principales:**
-  - `ReservaServiceImpl`: **96.8%** de cobertura de instrucciones.
+- **Cobertura de Instrucciones (Instruction Coverage):** **87.74%**
+- **Servicios Principales (`core.services`):** **97.60%** de cobertura de instrucciones.
+  - `ReservaServiceImpl`: **97.6%** de cobertura de instrucciones (incluye asignación de barberos por especialidad).
   - `AuthServiceImpl`: **100%** de cobertura de instrucciones.
   - `TurnoServiceImpl`: **94.0%** de cobertura de instrucciones.
   - Mappers y Validadores: **100%** de cobertura.
@@ -882,4 +894,50 @@ El flujo de entrega continua está automatizado mediante GitHub Actions en [`.gi
 - **Health Check en Vivo:** https://dosw-parcial-josemartinez-f4hwgudtgwcqgdb8.westus3-01.azurewebsites.net/api/v1/health
 - **Swagger UI en Vivo:** https://dosw-parcial-josemartinez-f4hwgudtgwcqgdb8.westus3-01.azurewebsites.net/swagger-ui/index.html
 - **Repositorio GitHub:** https://github.com/JoseMartinez883/DOSW_ParcialT2_JoseMartinez
+
+---
+
+## 8. Bono: Orquestación Local con Docker Compose
+
+Para cumplir con el bono del parcial y garantizar portabilidad total sin dependencias instaladas en la máquina host, se proporciona el archivo [`docker-compose.yml`](docker-compose.yml) y la plantilla de variables de entorno [`.env.example`](.env.example).
+
+### Servicios Orquestados:
+1. **`api` (`bobs-barber-api`):** Servicio backend Spring Boot empaquetado mediante build multietapa (Maven 3.9 + Temurin 21 JRE). Expone el puerto `8080:8080` y se conecta automáticamente a la red interna `bobs-barber-net`.
+2. **`mongodb` (`bobs-barber-mongodb`):** Base de datos NoSQL oficial `mongo:7` exponiendo el puerto `27017:27017` con volumen dedicado `mongo-data` para persistencia continua y comprobación de salud (`healthcheck` vía `mongosh ping`).
+
+### Comandos de Ejecución:
+```powershell
+# 1. Levantar el stack completo en segundo plano (con reconstrucción de imagen)
+docker compose up --build -d
+
+# 2. Consultar el estado de los contenedores
+docker compose ps
+
+# 3. Seguir los logs de la API en tiempo real
+docker compose logs -f api
+
+# 4. Detener y remover los contenedores
+docker compose down
+
+# 5. Detener y remover contenedores junto con el volumen de datos
+docker compose down -v
+```
+
+### Credenciales Sembradas para Pruebas:
+Al iniciar, `DatabaseSeeder` puebla automáticamente la base de datos con usuarios y datos oficiales:
+* **Administrador (`ADMIN`):** `admin@gmail.com` / `password123`
+* **Cliente (`CLIENTE`):** `juan@gmail.com` / `password123`
+
+### Catálogo de Barberos y Servicios Oficiales Disponibles:
+* **Barberos:**
+  * **Miguel:** Lun–Jue (10:00–17:00) — Especialidades: `CORTE`, `BARBA`.
+  * **Laura:** Lun–Vie (10:00–17:00) — Especialidades: `CORTE`, `TINTURA`.
+  * **Andrés:** Mar, Jue, Sáb–Dom (10:00–14:00) — Especialidades: `CORTE`, `AFEITADO`.
+* **Servicios:**
+  * `SER-001`: Corte clásico — $25,000
+  * `SER-002`: Barba tradicional — $18,000
+  * `SER-003`: Corte y barba — $38,000
+  * `SER-004`: Afeitado de cabeza — $20,000
+  * `SER-005`: Tinte — $45,000
+
 
