@@ -11,7 +11,9 @@ import org.springframework.stereotype.Component;
 
 import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
-import java.util.Date;
+import java.time.Clock;
+import java.time.Instant;
+import java.util.Date; 
 
 @Slf4j
 @Component
@@ -21,7 +23,7 @@ public class JwtTokenProvider {
     private final long expirationMs;
 
     public JwtTokenProvider(
-            @Value("${jwt.secret:bXlfc3VwZXJfc2VjcmV0X2tleV9mb3Jfand0X3ZhbGlkYXRpb25fZG9zd18yMDI0Cg==}") String secret,
+            @Value("${jwt.secret}") String secret,
             @Value("${jwt.expiration-ms:3600000}") long expirationMs) {
         this.secretKey = getSigningKey(secret);
         this.expirationMs = expirationMs;
@@ -34,11 +36,10 @@ public class JwtTokenProvider {
                 return Keys.hmacShaKeyFor(keyBytes);
             }
         } catch (Exception ignored) {
-            // Secret not in base64 format, fallback to UTF-8
+            // Intentional fallback: use raw UTF-8 bytes if secret is not valid Base64
         }
         byte[] keyBytes = secret.getBytes(StandardCharsets.UTF_8);
         if (keyBytes.length < 32) {
-            // HMAC-SHA256 requires at least 256 bits (32 bytes) of key material
             byte[] padded = new byte[32];
             System.arraycopy(keyBytes, 0, padded, 0, Math.min(keyBytes.length, 32));
             return Keys.hmacShaKeyFor(padded);
@@ -47,14 +48,14 @@ public class JwtTokenProvider {
     }
 
     public String generateToken(String correo, String rol) {
-        Date now = new Date();
-        Date expiryDate = new Date(now.getTime() + expirationMs);
+        Instant now = Instant.now(Clock.systemUTC());
+        Instant expiryInstant = now.plusMillis(expirationMs);
 
         return Jwts.builder()
                 .subject(correo)
                 .claim("rol", rol)
-                .issuedAt(now)
-                .expiration(expiryDate)
+                .issuedAt(Date.from(now))
+                .expiration(Date.from(expiryInstant))
                 .signWith(secretKey)
                 .compact();
     }
@@ -78,7 +79,7 @@ public class JwtTokenProvider {
     public boolean validateToken(String token) {
         try {
             Claims claims = extractAllClaims(token);
-            return !claims.getExpiration().before(new Date());
+            return !claims.getExpiration().toInstant().isBefore(Instant.now(Clock.systemUTC()));
         } catch (JwtException | IllegalArgumentException e) {
             log.warn("Token JWT inválido o expirado: {}", e.getMessage());
             return false;

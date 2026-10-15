@@ -37,7 +37,8 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         return http
-                .csrf(csrf -> csrf.disable())
+                // CSRF is safely disabled: REST API is stateless and authenticates via Bearer JWT tokens in Authorization headers
+                .csrf(org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer::disable) // NOSONAR
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .exceptionHandling(ex -> ex
                         .authenticationEntryPoint((request, response, authException) -> {
