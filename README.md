@@ -703,11 +703,27 @@ Para garantizar la trazabilidad y el aislamiento de cada funcionalidad, cada uno
 | **Pedir un turno** | `feature/pedir-turno` | `feat(reservas): implement reservation request with strict short-circuit validation chain`<br>`test(reservas): add unit tests verifying short-circuit validation and slot occupation` | Merge commit `965f49d` | Fusionada en `develop` y borrada |
 | **Consultar mis reservas** | `feature/consultar-mis-reservas` | `feat(reservas): implement authenticated client reservations retrieval`<br>`test(reservas): add unit tests for client reservations query with descending order` | Merge commit `7bd5ec4` | Fusionada en `develop` y borrada |
 | **Consultar todas las reservas** | `feature/consultar-todas-reservas` | `feat(reservas): implement admin reservations inspection endpoint`<br>`test(reservas): add unit tests for admin reservations auditing` | Merge commit `d9c3dce` | Fusionada en `develop` y borrada |
+| **Ajustes y validaciones de negocio** | `feature/ajustes-pedir-turno` | `feat: Parcial T2 - Update database seeder with official barbers and service catalog`<br>`feat: Parcial T2 - Refactor reservation service with specialty-based barber assignment and official error codes`<br>`feat: Parcial T2 - Support /mis-reservas endpoint in controller and security configuration`<br>`feat: Parcial T2 - Sanitize 500 internal error response in global exception handler` | Merge commit `fab0e43` | Fusionada en `develop` |
+| **Bono Docker Compose** | `feature/bono-docker-compose` | `feat: Parcial T2 - Implement docker compose orchestration and update project documentation for bonus` | Merge commit `1c65dfe` | Fusionada en `develop` |
 | **Consolidación de pruebas y docs** | `develop` | `test(coverage): consolidate persistence mappers and initializer tests reaching 88% JaCoCo coverage`<br>`feat(domain): complete domain models, persistence mappers, and infrastructure unit tests`<br>`docs: update README with implementation phase evidences and technical specs` | Directo en `develop` | Ramas consolidadas en `origin/develop` |
 
 ### Historial de integración en Git:
 
 ```text
+*   1c65dfe feat: Parcial T2 - Merge feature/bono-docker-compose with Docker orchestration and documentation
+|\  
+| * d5bf681 feat: Parcial T2 - Implement docker compose orchestration and update project documentation for bonus
+|/  
+* 7767d3f feat: Parcial T2 - Remove local drawio file and keep cloud editable reference in documentation
+*   fab0e43 feat: Parcial T2 - Merge feature/ajustes-pedir-turno with business logic and seeder corrections
+|\  
+| * 4a1d256 feat: Parcial T2 - Sanitize 500 internal error response in global exception handler
+| * 463f51f feat: Parcial T2 - Support /mis-reservas endpoint in controller and security configuration
+| * f4e2a70 feat: Parcial T2 - Refactor reservation service with specialty-based barber assignment and official error codes
+| * 5c756ca feat: Parcial T2 - Update database seeder with official barbers and service catalog
+|/  
+* f13c620 refactor(core): apply DDD naming, extract guard methods, and clean unused imports
+* 2731730 docs: finalize Git integration history and atomic commits in README
 * 768ed0a feat(domain): complete domain models, persistence mappers, and infrastructure unit tests
 * 9acd504 test(coverage): consolidate persistence mappers and initializer tests reaching 88% JaCoCo coverage
 *   d9c3dce Merge branch 'feature/consultar-todas-reservas' into develop
@@ -781,46 +797,51 @@ Cada caso de uso implementa el ciclo de vida completo: validación sintáctica d
 
 ### 1. Iniciar sesión (`POST /api/v1/auth/login`)
 - **Acceso:** Público (sin token).
-- **Entrada:** `LoginRequest` con correo y contraseña.
+- **Entrada:** `LoginRequest` (`correo`, `password`).
 - **Lógica:** Valida la existencia del usuario en `UsuarioRepository` y comprueba la contraseña cifrada mediante `BCryptPasswordEncoder`. Al autenticar exitosamente, genera un token JWT firmado (JJWT) que encapsula el correo y el rol (`CLIENTE` o `ADMIN`).
-- **Respuesta:** `200 OK` con `AuthResponse` (`token`, `tipoToken: "Bearer"`, `usuario`, `rol`).
+- **Respuesta:** `200 OK` con `LoginResponse` (`token`, `rol`).
 - **Errores:** `401 Unauthorized` si las credenciales son incorrectas o el usuario no existe.
 
 ### 2. Crear turno (`POST /api/v1/turnos`)
 - **Acceso:** Protegido con rol `ADMIN` (`@PreAuthorize("hasRole('ADMIN')")`).
-- **Entrada:** `CrearTurnoRequest` (`barberoId`, `fecha: YYYY-MM-DD`, `hora: HH:mm`).
+- **Entrada:** `CrearTurnoRequest` (`barberoNombre`, `fecha: YYYY-MM-DD`, `hora: HH:mm`).
 - **Lógica:** 
-  1. Valida que el barbero exista en MongoDB.
+  1. Valida que el barbero exista en MongoDB (`barberoRepository.findByNombreIgnoreCase`).
   2. Valida que la fecha sea futura (`LocalDate.parse(fecha).isAfter(hoy)`).
-  3. Valida que la hora se encuentre dentro de la jornada laboral del barbero (`08:00 - 20:00`).
+  3. Valida que la fecha caiga en un día laboral del barbero (`diasDisponibles`) y la hora dentro de su horario de atención (`horaInicio - horaFin`).
   4. Valida que no exista un turno duplicado para el mismo barbero en esa fecha y hora.
   5. Persiste el turno en MongoDB con estado inicial `DISPONIBLE`.
-- **Respuesta:** `201 Created` con `TurnoResponse`.
-- **Errores:** `400 Bad Request` (formato inválido), `409 Conflict` (turno duplicado), `422 Unprocessable Entity` (fecha no futura o fuera de jornada).
+- **Respuesta:** `201 Created` con `TurnoResponse` (`id`, `barberoNombre`, `fecha`, `hora`, `estado`).
+- **Errores:** `400 Bad Request` (formato inválido de fecha/hora), `404 Not Found` (barbero no existe), `409 Conflict` (turno duplicado), `422 Unprocessable Entity` (fecha no futura o fuera del horario/días del barbero).
 
 ### 3. Pedir un turno (`POST /api/v1/reservas`)
-- **Acceso:** Protegido para usuarios autenticados (`CLIENTE` o `ADMIN`).
-- **Entrada:** `CrearReservaRequest` (`clienteNombre`, `clienteCorreo`, `clienteTelefono`, `barberoId`, `fecha`, `hora`, `codigoServicio`).
+- **Acceso:** Protegido para clientes autenticados con rol `CLIENTE` (`@PreAuthorize("hasRole('CLIENTE')")`).
+- **Entrada:** `PedirTurnoRequest` con objeto `cliente: {nombre, telefono, correo}`, `fecha: YYYY-MM-DD`, `hora: HH:mm` y lista de `servicios: ["SER-001"]`.
 - **Cadena de validaciones en orden estricto (Short-Circuit):**
-  1. **Capacidad de franja (E01):** Verifica que la franja horaria no exceda el límite máximo de 3 reservas activas (`countByFechaAndHoraAndEstado(fecha, hora, "CONFIRMADA") >= 3`). Si está llena, lanza `ConflictException` (`409 Conflict`, código `E01`).
-  2. **Disponibilidad de turno y barbero activo (E03 / E02):**
-     - Busca un turno para el barbero en esa fecha y hora con estado `DISPONIBLE`. Si no existe o el barbero no está activo, lanza `ConflictException` (`409 Conflict`, código `E03`).
-     - Comprueba que el barbero posea en su catálogo de especialidades el servicio requerido. Si no lo domina, lanza `BusinessValidationException` (`422 Unprocessable Entity`, código `E02`).
-  3. **Existencia del servicio en catálogo (E09):** Consulta el servicio en `ServicioRepository`. Si no existe, lanza `ResourceNotFoundException` (`404 Not Found`, código `E09`).
-  4. **Creación atómica de la reserva:** Solo si **todas** las validaciones previas son superadas con éxito:
-     - El turno cambia su estado a `OCUPADO` y se actualiza en MongoDB.
-     - Se persiste la nueva reserva con estado `CONFIRMADA`, calculando el total a pagar según el precio oficial del catálogo.
-- **Respuesta:** `201 Created` con `ReservaResponse` con identificador único y estado `CONFIRMADA`.
+  1. **Capacidad de franja (E01):** Verifica que la franja horaria no exceda el límite máximo de 3 reservas activas (`countByFechaAndHoraAndEstado(fecha, hora, "CONFIRMADA") >= 3`) y que existan turnos disponibles. Si no hay cupo o no hay turnos libres, lanza `BusinessException` (`409 Conflict`, código `E01`).
+  2. **Disponibilidad de barbero con especialidad (E100 / E02):**
+     - Busca entre los turnos libres de la franja un barbero activo que domine todas las especialidades requeridas para los servicios solicitados.
+     - Si hay turnos pero los barberos están inactivos, lanza `BusinessException` (`409 Conflict`, código `E100`).
+     - Si ningún barbero libre domina las especialidades, lanza `BusinessException` (`422 Unprocessable Entity`, código `E02`).
+  3. **Datos de entrada del cliente (E03, E07, E08):**
+     - Nombre obligatorio y no vacío (`E03`).
+     - Teléfono de exactamente 10 dígitos numéricos (`E07`).
+     - Correo válido con dominio `@gmail.com` (`E08`). Si falla alguno, responde `400 Bad Request`.
+  4. **Existencia del servicio en catálogo (E09):** Consulta cada servicio en `ServicioRepository`. Si alguno no existe, lanza `BusinessException` (`404 Not Found`, código `E09`).
+  5. **Creación atómica de la reserva:** Solo si **todas** las validaciones previas son superadas con éxito:
+     - El turno seleccionado cambia su estado a `OCUPADO` y se actualiza en MongoDB.
+     - Se persiste la nueva reserva con estado `CONFIRMADA`, calculando el total como la sumatoria de los precios oficiales del catálogo.
+- **Respuesta:** `201 Created` con `ReservaResponse` (`idReserva`, `barberoAsignado`, `total`, `estado: "CONFIRMADA"`).
 
 ### 4. Consultar mis reservas (`GET /api/v1/reservas/me` o `GET /api/v1/reservas/mis-reservas`)
 - **Acceso:** Protegido para clientes autenticados (`CLIENTE`).
-- **Lógica:** Extrae la identidad del usuario a partir del token JWT autenticado (`SecurityContextHolder`), busca sus reservas en `ReservaRepository` ordenadas por fecha/hora y las mapea al DTO de salida. Soporta mapeo dual para máxima compatibilidad con la rúbrica del parcial.
-- **Respuesta:** `200 OK` con lista de `ReservaResponse`.
+- **Lógica:** Extrae la identidad del usuario a partir del token JWT autenticado (`SecurityContextHolder`), busca sus reservas en `ReservaRepository` ordenadas por fecha/hora de manera descendente y las mapea al DTO de salida `MisReservasResponse`.
+- **Respuesta:** `200 OK` con lista de `MisReservasResponse`.
 
 ### 5. Consultar todas las reservas (`GET /api/v1/reservas`)
 - **Acceso:** Protegido exclusivamente para rol `ADMIN` (`@PreAuthorize("hasRole('ADMIN')")`).
-- **Lógica:** Consulta la totalidad de reservas registradas en el sistema para auditoría y gestión de la barbería.
-- **Respuesta:** `200 OK` con lista completa de `ReservaResponse`.
+- **Lógica:** Consulta la totalidad de reservas registradas en el sistema para auditoría y gestión de la barbería, ordenadas por fecha/hora de manera descendente.
+- **Respuesta:** `200 OK` con lista completa de `TodasReservasResponse`.
 
 ---
 
@@ -845,7 +866,7 @@ El backend utiliza `@Slf4j` (SLF4J + Logback) con segregación estructurada de n
 | Nivel | Cuándo se utiliza | Ejemplo en el código |
 |---|---|---|
 | `INFO` | Inicio de operaciones clave, recepción de peticiones en controladores, confirmación de reservas y turnos, inicios de sesión válidos. | `log.info("Reserva creada y confirmada exitosamente: id=[{}], barbero=[{}], total=[{}]", ...)` |
-| `WARN` | Rechazos de reglas de negocio esperadas y controladas (franja llena E01, especialidad no coincidente E02, barbero inactivo E03, credenciales inválidas). | `log.warn("Rechazo por franja llena (E01): [{}] reservas activas en fecha [{}]", ...)` |
+| `WARN` | Rechazos de reglas de negocio esperadas y controladas (franja llena E01, especialidad no coincidente E02, barbero inactivo E100, credenciales inválidas). | `log.warn("Rechazo por franja llena (E01): [{}] reservas activas en fecha [{}]", ...)` |
 | `ERROR` | Excepciones no controladas o fallas de infraestructura en `GlobalExceptionHandler`. | `log.error("Excepción inesperada en el servidor: ", ex)` |
 
 > [!SECURITY]
@@ -930,14 +951,14 @@ Al iniciar, `DatabaseSeeder` puebla automáticamente la base de datos con usuari
 
 ### Catálogo de Barberos y Servicios Oficiales Disponibles:
 * **Barberos:**
-  * **Miguel:** Lun–Jue (10:00–17:00) — Especialidades: `CORTE`, `BARBA`.
-  * **Laura:** Lun–Vie (10:00–17:00) — Especialidades: `CORTE`, `TINTURA`.
-  * **Andrés:** Mar, Jue, Sáb–Dom (10:00–14:00) — Especialidades: `CORTE`, `AFEITADO`.
+  * **Miguel:** Lun–Jue (10:00–17:00) — Especialidades: `CORTE`, `CORTE CON BARBA`.
+  * **Laura:** Lun–Vie (10:00–17:00) — Especialidades: `CAPILAR`, `CEJAS`.
+  * **Andrés:** Mar, Jue, Sáb–Dom (10:00–14:00) — Especialidades: `CORTE`, `BARBA`.
 * **Servicios:**
-  * `SER-001`: Corte clásico — $25,000
-  * `SER-002`: Barba tradicional — $18,000
-  * `SER-003`: Corte y barba — $38,000
-  * `SER-004`: Afeitado de cabeza — $20,000
-  * `SER-005`: Tinte — $45,000
+  * `SER-001`: Corte clásico — $25.000 — Especialidad: `CORTE`
+  * `SER-002`: Corte + barba — $38.000 — Especialidad: `CORTE CON BARBA`
+  * `SER-003`: Diseño de cejas — $15.000 — Especialidad: `CEJAS`
+  * `SER-004`: Afeitado con navaja — $20.000 — Especialidad: `BARBA`
+  * `SER-005`: Tratamiento capilar — $45.000 — Especialidad: `CAPILAR`
 
 
