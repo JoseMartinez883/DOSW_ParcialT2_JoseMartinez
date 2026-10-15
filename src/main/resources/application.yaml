@@ -4,6 +4,7 @@ spring:
   data:
     mongodb:
       uri: ${MONGODB_URI:mongodb://localhost:27017/dosw_parcial}   # local por defecto; en Azure viene de variable de entorno
+      auto-index-creation: false
 
 server:
   port: ${PORT:8080}
