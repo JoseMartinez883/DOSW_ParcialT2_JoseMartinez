@@ -55,7 +55,9 @@ public class ReservaController {
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     public ResponseEntity<ReservaResponse> pedirTurno(@Valid @RequestBody PedirTurnoRequest request) {
-        log.info("Petición recibida en POST /api/v1/reservas para cliente [{}]", request.getCliente().getNombre());
+        String nombreCliente = (request.getCliente() != null && request.getCliente().getNombre() != null)
+                ? request.getCliente().getNombre() : "Anónimo";
+        log.info("Petición recibida en POST /api/v1/reservas para cliente [{}]", nombreCliente);
         ReservaResponse response = reservaService.pedirTurno(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
