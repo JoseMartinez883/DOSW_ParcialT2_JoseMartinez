@@ -152,8 +152,8 @@ class ReservaServiceImplTest {
     }
 
     @Test
-    @DisplayName("Paso 2: Debe rechazar con E03 (409) si no hay turnos disponibles en esa franja")
-    void pedirTurno_SinTurnosDisponibles_ThrowsE03() {
+    @DisplayName("Paso 1: Debe rechazar con E01 (409) si no hay turnos disponibles en esa franja")
+    void pedirTurno_SinTurnosDisponibles_ThrowsE01() {
         // Arrange
         when(reservaRepository.countByFechaAndHoraAndEstado("2026-10-25", "10:00", "CONFIRMADA")).thenReturn(0L);
         when(turnoRepository.findByFechaAndHoraAndEstado("2026-10-25", "10:00", "DISPONIBLE")).thenReturn(Collections.emptyList());
@@ -161,25 +161,26 @@ class ReservaServiceImplTest {
         // Act & Assert
         BusinessException ex = assertThrows(BusinessException.class, () -> reservaService.pedirTurno(validRequest));
 
-        assertEquals("E03", ex.getCodigo());
+        assertEquals("E01", ex.getCodigo());
         assertEquals(HttpStatus.CONFLICT, ex.getStatus());
         verify(turnoRepository, never()).save(any());
         verify(reservaRepository, never()).save(any());
     }
 
     @Test
-    @DisplayName("Paso 2: Debe rechazar con E03 (409) si el barbero asignado está inactivo")
-    void pedirTurno_BarberoInactivo_ThrowsE03() {
+    @DisplayName("Paso 2: Debe rechazar con E100 (409) si el barbero asignado está inactivo")
+    void pedirTurno_BarberoInactivo_ThrowsE100() {
         // Arrange
         barberoMiguel.setActivo(false);
         when(reservaRepository.countByFechaAndHoraAndEstado("2026-10-25", "10:00", "CONFIRMADA")).thenReturn(0L);
         when(turnoRepository.findByFechaAndHoraAndEstado("2026-10-25", "10:00", "DISPONIBLE")).thenReturn(List.of(availableTurno));
+        when(servicioRepository.findByCodigo("SER-001")).thenReturn(Optional.of(servicioCorte));
         when(barberoRepository.findByNombreIgnoreCase("Miguel")).thenReturn(Optional.of(barberoMiguel));
 
         // Act & Assert
         BusinessException ex = assertThrows(BusinessException.class, () -> reservaService.pedirTurno(validRequest));
 
-        assertEquals("E03", ex.getCodigo());
+        assertEquals("E100", ex.getCodigo());
         assertEquals(HttpStatus.CONFLICT, ex.getStatus());
         verify(turnoRepository, never()).save(any());
         verify(reservaRepository, never()).save(any());
@@ -211,7 +212,6 @@ class ReservaServiceImplTest {
         // Arrange
         when(reservaRepository.countByFechaAndHoraAndEstado("2026-10-25", "10:00", "CONFIRMADA")).thenReturn(0L);
         when(turnoRepository.findByFechaAndHoraAndEstado("2026-10-25", "10:00", "DISPONIBLE")).thenReturn(List.of(availableTurno));
-        when(barberoRepository.findByNombreIgnoreCase("Miguel")).thenReturn(Optional.of(barberoMiguel));
         when(servicioRepository.findByCodigo("SER-001")).thenReturn(Optional.empty());
 
         // Act & Assert
@@ -284,5 +284,58 @@ class ReservaServiceImplTest {
         assertEquals("r2", resultado.get(1).getId());
         assertEquals("Pedro", resultado.get(1).getCliente());
         verify(reservaRepository).findAllReservas();
+    }
+
+    @Test
+    @DisplayName("Debe asignar dinámicamente el barbero con la especialidad requerida si hay varios turnos disponibles en la franja")
+    void pedirTurno_MultiplesTurnos_AsignaBarberoConEspecialidad() {
+        // Arrange: 2 turnos disponibles en la misma franja (Laura sin CORTE y Miguel con CORTE)
+        TurnoEntity turnoLaura = TurnoEntity.builder()
+                .id("t-laura")
+                .barberoNombre("Laura")
+                .fecha("2026-10-25")
+                .hora("10:00")
+                .estado("DISPONIBLE")
+                .build();
+
+        TurnoEntity turnoMiguel = TurnoEntity.builder()
+                .id("t-miguel")
+                .barberoNombre("Miguel")
+                .fecha("2026-10-25")
+                .hora("10:00")
+                .estado("DISPONIBLE")
+                .build();
+
+        BarberoEntity barberoLaura = BarberoEntity.builder()
+                .id("b-laura")
+                .nombre("Laura")
+                .especialidades(List.of("CEJAS", "CAPILAR"))
+                .activo(true)
+                .build();
+
+        when(reservaRepository.countByFechaAndHoraAndEstado("2026-10-25", "10:00", "CONFIRMADA")).thenReturn(0L);
+        when(turnoRepository.findByFechaAndHoraAndEstado("2026-10-25", "10:00", "DISPONIBLE")).thenReturn(List.of(turnoLaura, turnoMiguel));
+        when(servicioRepository.findByCodigo("SER-001")).thenReturn(Optional.of(servicioCorte));
+        when(barberoRepository.findByNombreIgnoreCase("Laura")).thenReturn(Optional.of(barberoLaura));
+        when(barberoRepository.findByNombreIgnoreCase("Miguel")).thenReturn(Optional.of(barberoMiguel));
+
+        ReservaEntity savedReserva = ReservaEntity.builder()
+                .id("r-dinamica")
+                .barberoAsignado("Miguel")
+                .total(25000.0)
+                .estado("CONFIRMADA")
+                .build();
+        when(reservaRepository.save(any(ReservaEntity.class))).thenReturn(savedReserva);
+
+        // Act
+        ReservaResponse response = reservaService.pedirTurno(validRequest);
+
+        // Assert: Verifica que asignó a Miguel (que tiene CORTE) y no a Laura
+        assertNotNull(response);
+        assertEquals("Miguel", response.getBarberoAsignado());
+        assertEquals("OCUPADO", turnoMiguel.getEstado());
+        assertEquals("DISPONIBLE", turnoLaura.getEstado());
+        verify(turnoRepository).save(turnoMiguel);
+        verify(turnoRepository, never()).save(turnoLaura);
     }
 }

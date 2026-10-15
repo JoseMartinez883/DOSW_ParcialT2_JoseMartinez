@@ -41,14 +41,19 @@ class DatabaseSeederTest {
         when(usuarioRepository.existsByCorreo("admin@gmail.com")).thenReturn(false);
         when(usuarioRepository.existsByCorreo("juan@gmail.com")).thenReturn(false);
         when(barberoRepository.existsByNombreIgnoreCase("Miguel")).thenReturn(false);
+        when(barberoRepository.existsByNombreIgnoreCase("Laura")).thenReturn(false);
+        when(barberoRepository.existsByNombreIgnoreCase("Andrés")).thenReturn(false);
         when(servicioRepository.existsByCodigo("SER-001")).thenReturn(false);
         when(servicioRepository.existsByCodigo("SER-002")).thenReturn(false);
+        when(servicioRepository.existsByCodigo("SER-003")).thenReturn(false);
+        when(servicioRepository.existsByCodigo("SER-004")).thenReturn(false);
+        when(servicioRepository.existsByCodigo("SER-005")).thenReturn(false);
         when(passwordEncoder.encode(anyString())).thenReturn("hashed_pwd");
 
         databaseSeeder.run();
 
         verify(usuarioRepository, times(2)).save(any());
-        verify(barberoRepository, times(1)).save(any());
-        verify(servicioRepository, times(2)).save(any());
+        verify(barberoRepository, times(3)).save(any());
+        verify(servicioRepository, times(5)).save(any());
     }
 }
