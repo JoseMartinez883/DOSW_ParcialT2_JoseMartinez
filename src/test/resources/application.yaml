@@ -1,0 +1,14 @@
+spring:
+  application:
+    name: DOSW-ParcialT2-Test
+  data:
+    mongodb:
+      uri: mongodb://localhost:27017/dosw_parcial_test
+      auto-index-creation: false
+
+server:
+  port: 8080
+
+jwt:
+  secret: dGVzdC1zZWNyZXQta2V5LWZvci1qdW5pdC1tb2NraXRvLXRlc3RzLTIwMjY=
+  expiration-ms: 3600000

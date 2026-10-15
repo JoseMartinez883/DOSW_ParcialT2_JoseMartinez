@@ -37,4 +37,6 @@ target/
 
 ### Custom Secrets and Environment ###
 .env
+.env.*
+.env.example
 *.p12

@@ -17,6 +17,12 @@ import java.util.List;
 @Component
 public class DatabaseSeeder implements CommandLineRunner {
 
+    private static final String CORTE = "CORTE";
+    private static final String SER_001 = "SER-001";
+    private static final String THURSDAY = "THURSDAY";
+    private static final String TUESDAY = "TUESDAY";
+    private static final String HORA_10_00 = "10:00";
+
     private final UsuarioRepository usuarioRepository;
     private final BarberoRepository barberoRepository;
     private final ServicioRepository servicioRepository;
@@ -74,9 +80,9 @@ public class DatabaseSeeder implements CommandLineRunner {
         if (!barberoRepository.existsByNombreIgnoreCase("Miguel")) {
             BarberoEntity miguel = BarberoEntity.builder()
                     .nombre("Miguel")
-                    .especialidades(List.of("CORTE", "CORTE CON BARBA", "SER-001", "SER-002"))
-                    .diasDisponibles(List.of("MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY"))
-                    .horaInicio("10:00")
+                    .especialidades(List.of(CORTE, "CORTE CON BARBA", SER_001, "SER-002"))
+                    .diasDisponibles(List.of("MONDAY", TUESDAY, "WEDNESDAY", THURSDAY))
+                    .horaInicio(HORA_10_00)
                     .horaFin("17:00")
                     .activo(true)
                     .build();
@@ -88,8 +94,8 @@ public class DatabaseSeeder implements CommandLineRunner {
             BarberoEntity laura = BarberoEntity.builder()
                     .nombre("Laura")
                     .especialidades(List.of("CAPILAR", "CEJAS", "SER-003", "SER-005"))
-                    .diasDisponibles(List.of("MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY"))
-                    .horaInicio("10:00")
+                    .diasDisponibles(List.of("MONDAY", TUESDAY, "WEDNESDAY", THURSDAY, "FRIDAY"))
+                    .horaInicio(HORA_10_00)
                     .horaFin("17:00")
                     .activo(true)
                     .build();
@@ -100,9 +106,9 @@ public class DatabaseSeeder implements CommandLineRunner {
         if (!barberoRepository.existsByNombreIgnoreCase("Andrés") && !barberoRepository.existsByNombreIgnoreCase("Andres")) {
             BarberoEntity andres = BarberoEntity.builder()
                     .nombre("Andrés")
-                    .especialidades(List.of("CORTE", "BARBA", "SER-001", "SER-004"))
-                    .diasDisponibles(List.of("TUESDAY", "THURSDAY", "SATURDAY", "SUNDAY"))
-                    .horaInicio("10:00")
+                    .especialidades(List.of(CORTE, "BARBA", SER_001, "SER-004"))
+                    .diasDisponibles(List.of(TUESDAY, THURSDAY, "SATURDAY", "SUNDAY"))
+                    .horaInicio(HORA_10_00)
                     .horaFin("14:00")
                     .activo(true)
                     .build();
@@ -112,7 +118,7 @@ public class DatabaseSeeder implements CommandLineRunner {
     }
 
     private void seedDefaultCatalog() {
-        seedServiceIfAbsent("SER-001", "Corte clásico", 25000.0, "CORTE");
+        seedServiceIfAbsent(SER_001, "Corte clásico", 25000.0, CORTE);
         seedServiceIfAbsent("SER-002", "Corte + barba", 38000.0, "CORTE CON BARBA");
         seedServiceIfAbsent("SER-003", "Diseño de cejas", 15000.0, "CEJAS");
         seedServiceIfAbsent("SER-004", "Afeitado con navaja", 20000.0, "BARBA");

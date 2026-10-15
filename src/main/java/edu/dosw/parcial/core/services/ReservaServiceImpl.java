@@ -7,6 +7,7 @@ import edu.dosw.parcial.controller.dtos.response.TodasReservasResponse;
 import edu.dosw.parcial.controller.mappers.ReservaDtoMapper;
 import edu.dosw.parcial.core.models.Reserva;
 import edu.dosw.parcial.core.models.exception.BusinessException;
+import edu.dosw.parcial.core.validators.ClienteValidator;
 import edu.dosw.parcial.persistence.entities.BarberoEntity;
 import edu.dosw.parcial.persistence.entities.ReservaEntity;
 import edu.dosw.parcial.persistence.entities.ServicioEntity;
@@ -21,6 +22,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
@@ -36,6 +38,7 @@ public class ReservaServiceImpl implements ReservaService {
     private final ServicioRepository servicioRepository;
     private final ReservaPersistenceMapper reservaPersistenceMapper;
     private final ReservaDtoMapper reservaDtoMapper;
+    private final ClienteValidator clienteValidator;
 
     public ReservaServiceImpl(
             ReservaRepository reservaRepository,
@@ -43,20 +46,25 @@ public class ReservaServiceImpl implements ReservaService {
             BarberoRepository barberoRepository,
             ServicioRepository servicioRepository,
             ReservaPersistenceMapper reservaPersistenceMapper,
-            ReservaDtoMapper reservaDtoMapper) {
+            ReservaDtoMapper reservaDtoMapper,
+            ClienteValidator clienteValidator) {
         this.reservaRepository = reservaRepository;
         this.turnoRepository = turnoRepository;
         this.barberoRepository = barberoRepository;
         this.servicioRepository = servicioRepository;
         this.reservaPersistenceMapper = reservaPersistenceMapper;
         this.reservaDtoMapper = reservaDtoMapper;
+        this.clienteValidator = clienteValidator;
     }
 
     @Override
     public ReservaResponse pedirTurno(PedirTurnoRequest request) {
+        String nombreCliente = request.getCliente() != null && request.getCliente().getNombre() != null
+                ? request.getCliente().getNombre() : "Anónimo";
         log.info("Iniciando solicitud de reserva para cliente [{}] en fecha [{}] y hora [{}]",
-                request.getCliente().getNombre(), request.getFecha(), request.getHora());
+                nombreCliente, request.getFecha(), request.getHora());
 
+        // 1. Disponibilidad de franja (Aforo máximo de 3 y existencia de turnos libres) -> E01
         validateSlotCapacity(request.getFecha(), request.getHora());
 
         List<TurnoEntity> turnosDisponibles = turnoRepository.findByFechaAndHoraAndEstado(
@@ -68,26 +76,25 @@ public class ReservaServiceImpl implements ReservaService {
             throw new BusinessException("E01", "No hay turnos disponibles para la fecha y hora seleccionadas.", HttpStatus.CONFLICT);
         }
 
+        // 2. Servicio permitido en catálogo y cálculo de tarifa -> E09
         double total = calculateTotalAndValidateCatalog(request.getServicios());
 
+        // 3. Barbero disponible con especialidad requerida -> E100 / E02
         TurnoEntity turnoSeleccionado = null;
         BarberoEntity barberoSeleccionado = null;
         boolean hayBarberoInactivo = false;
 
         for (TurnoEntity turno : turnosDisponibles) {
             Optional<BarberoEntity> barberoOpt = barberoRepository.findByNombreIgnoreCase(turno.getBarberoNombre());
-            if (barberoOpt.isEmpty()) {
-                continue;
-            }
-            BarberoEntity barbero = barberoOpt.get();
-            if (!barbero.isActivo()) {
-                hayBarberoInactivo = true;
-                continue;
-            }
-            if (barberoHasSpecialties(barbero, request.getServicios())) {
-                turnoSeleccionado = turno;
-                barberoSeleccionado = barbero;
-                break;
+            if (barberoOpt.isPresent()) {
+                BarberoEntity barbero = barberoOpt.get();
+                if (!barbero.isActivo()) {
+                    hayBarberoInactivo = true;
+                } else if (barberoHasSpecialties(barbero, request.getServicios())) {
+                    turnoSeleccionado = turno;
+                    barberoSeleccionado = barbero;
+                    break;
+                }
             }
         }
 
@@ -101,6 +108,8 @@ public class ReservaServiceImpl implements ReservaService {
                     "El barbero seleccionado está libre, pero no tiene la especialidad necesaria para alguno de los servicios solicitados.",
                     HttpStatus.UNPROCESSABLE_ENTITY);
         }
+
+        clienteValidator.validar(request.getCliente());
 
         turnoSeleccionado.setEstado("OCUPADO");
         turnoRepository.save(turnoSeleccionado);
@@ -117,7 +126,7 @@ public class ReservaServiceImpl implements ReservaService {
                 .barberoAsignado(barberoSeleccionado.getNombre())
                 .total(total)
                 .estado("CONFIRMADA")
-                .creadoEn(LocalDateTime.now())
+                .creadoEn(LocalDateTime.now(ZoneId.systemDefault()))
                 .build();
 
         ReservaEntity savedEntity = reservaRepository.save(reservaEntity);

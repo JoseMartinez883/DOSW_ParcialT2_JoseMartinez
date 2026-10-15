@@ -6,6 +6,7 @@ import edu.dosw.parcial.controller.mappers.TurnoDtoMapper;
 import edu.dosw.parcial.core.models.EstadoTurno;
 import edu.dosw.parcial.core.models.Turno;
 import edu.dosw.parcial.core.models.exception.BusinessException;
+import edu.dosw.parcial.core.utils.DateUtil;
 import edu.dosw.parcial.persistence.entities.BarberoEntity;
 import edu.dosw.parcial.persistence.entities.TurnoEntity;
 import edu.dosw.parcial.persistence.mappers.TurnoPersistenceMapper;
@@ -17,8 +18,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
 import java.time.LocalTime;
-import java.time.format.DateTimeParseException;
-import java.util.Collection;
+import java.time.ZoneId;
 
 @Slf4j
 @Service
@@ -72,14 +72,14 @@ public class TurnoServiceImpl implements TurnoService {
     private LocalDate validateFutureDate(String rawDate) {
         LocalDate date;
         try {
-            date = LocalDate.parse(rawDate.trim());
-        } catch (DateTimeParseException e) {
+            date = DateUtil.parseFecha(rawDate);
+        } catch (Exception e) {
             log.warn("Formato de fecha inválido: [{}]", rawDate);
             throw new BusinessException("E_FORMATO_FECHA", "La fecha debe tener un formato válido y ser futura.", HttpStatus.BAD_REQUEST);
         }
 
-        if (!date.isAfter(LocalDate.now())) {
-            log.warn("La fecha [{}] no es futura con respecto a hoy [{}]", date, LocalDate.now());
+        if (!DateUtil.esFechaFutura(date)) {
+            log.warn("La fecha [{}] no es futura con respecto a hoy [{}]", date, LocalDate.now(ZoneId.systemDefault()));
             throw new BusinessException("E_FORMATO_FECHA", "La fecha debe tener un formato válido y ser futura.", HttpStatus.BAD_REQUEST);
         }
         return date;
@@ -87,8 +87,8 @@ public class TurnoServiceImpl implements TurnoService {
 
     private LocalTime validateTimeFormat(String rawTime) {
         try {
-            return LocalTime.parse(rawTime.trim());
-        } catch (DateTimeParseException e) {
+            return DateUtil.parseHora(rawTime);
+        } catch (Exception e) {
             log.warn("Formato de hora inválido: [{}]", rawTime);
             throw new BusinessException("E_FORMATO_HORA", "La hora debe tener un formato válido (HH:mm).", HttpStatus.BAD_REQUEST);
         }
@@ -103,21 +103,15 @@ public class TurnoServiceImpl implements TurnoService {
     }
 
     private void validateBarberSchedule(BarberoEntity barbero, LocalDate date, LocalTime time) {
-        String dayOfWeek = date.getDayOfWeek().name();
-        Collection<String> diasDisponibles = barbero.getDiasDisponibles();
-        if (diasDisponibles != null && !diasDisponibles.isEmpty()) {
-            boolean diaValido = diasDisponibles.stream()
-                    .anyMatch(d -> d.equalsIgnoreCase(dayOfWeek) || d.equalsIgnoreCase("ALL"));
-            if (!diaValido) {
-                log.warn("El barbero [{}] no labora el día [{}]", barbero.getNombre(), dayOfWeek);
-                throw new BusinessException("E_FUERA_DE_HORARIO", "La fecha u hora no se encuentra dentro de la disponibilidad del barbero.", HttpStatus.UNPROCESSABLE_ENTITY);
-            }
+        if (!DateUtil.esDiaLaborable(date, barbero.getDiasDisponibles())) {
+            log.warn("El barbero [{}] no labora el día [{}]", barbero.getNombre(), date.getDayOfWeek());
+            throw new BusinessException("E_FUERA_DE_HORARIO", "La fecha u hora no se encuentra dentro de la disponibilidad del barbero.", HttpStatus.UNPROCESSABLE_ENTITY);
         }
 
         if (barbero.getHoraInicio() != null && barbero.getHoraFin() != null) {
-            LocalTime inicio = LocalTime.parse(barbero.getHoraInicio());
-            LocalTime fin = LocalTime.parse(barbero.getHoraFin());
-            if (time.isBefore(inicio) || time.isAfter(fin)) {
+            LocalTime inicio = DateUtil.parseHora(barbero.getHoraInicio());
+            LocalTime fin = DateUtil.parseHora(barbero.getHoraFin());
+            if (!DateUtil.franjaDentroDeHorario(time, inicio, fin)) {
                 log.warn("La hora [{}] está fuera del horario del barbero [{} - {}]", time, inicio, fin);
                 throw new BusinessException("E_FUERA_DE_HORARIO", "La fecha u hora no se encuentra dentro de la disponibilidad del barbero.", HttpStatus.UNPROCESSABLE_ENTITY);
             }

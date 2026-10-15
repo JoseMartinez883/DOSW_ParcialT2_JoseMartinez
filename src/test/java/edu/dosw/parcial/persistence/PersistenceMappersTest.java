@@ -1,7 +1,6 @@
 package edu.dosw.parcial.persistence;
 
 import edu.dosw.parcial.core.models.Barbero;
-import edu.dosw.parcial.core.models.Cliente;
 import edu.dosw.parcial.core.models.EstadoReserva;
 import edu.dosw.parcial.core.models.EstadoTurno;
 import edu.dosw.parcial.core.models.RolUsuario;
