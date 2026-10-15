@@ -59,11 +59,48 @@ public class ReservaServiceImpl implements ReservaService {
 
         validateSlotCapacity(request.getFecha(), request.getHora());
 
-        TurnoEntity turnoSeleccionado = resolveAvailableSlot(request.getFecha(), request.getHora());
-        BarberoEntity barbero = resolveActiveBarber(turnoSeleccionado.getBarberoNombre());
+        List<TurnoEntity> turnosDisponibles = turnoRepository.findByFechaAndHoraAndEstado(
+                request.getFecha().trim(), request.getHora().trim(), "DISPONIBLE");
 
-        validateBarberSpecialties(barbero, request.getServicios());
+        if (turnosDisponibles.isEmpty()) {
+            log.warn("Rechazo por disponibilidad de franja (E01): no hay turnos disponibles para fecha [{}] y hora [{}]",
+                    request.getFecha(), request.getHora());
+            throw new BusinessException("E01", "No hay turnos disponibles para la fecha y hora seleccionadas.", HttpStatus.CONFLICT);
+        }
+
         double total = calculateTotalAndValidateCatalog(request.getServicios());
+
+        TurnoEntity turnoSeleccionado = null;
+        BarberoEntity barberoSeleccionado = null;
+        boolean hayBarberoInactivo = false;
+
+        for (TurnoEntity turno : turnosDisponibles) {
+            Optional<BarberoEntity> barberoOpt = barberoRepository.findByNombreIgnoreCase(turno.getBarberoNombre());
+            if (barberoOpt.isEmpty()) {
+                continue;
+            }
+            BarberoEntity barbero = barberoOpt.get();
+            if (!barbero.isActivo()) {
+                hayBarberoInactivo = true;
+                continue;
+            }
+            if (barberoHasSpecialties(barbero, request.getServicios())) {
+                turnoSeleccionado = turno;
+                barberoSeleccionado = barbero;
+                break;
+            }
+        }
+
+        if (turnoSeleccionado == null) {
+            if (hayBarberoInactivo) {
+                log.warn("Rechazo por barbero inactivo (E100)");
+                throw new BusinessException("E100", "El barbero asignado no se encuentra disponible actualmente.", HttpStatus.CONFLICT);
+            }
+            log.warn("Rechazo por especialidad incompatible (E02): ningún barbero libre domina los servicios solicitados");
+            throw new BusinessException("E02",
+                    "El barbero seleccionado está libre, pero no tiene la especialidad necesaria para alguno de los servicios solicitados.",
+                    HttpStatus.UNPROCESSABLE_ENTITY);
+        }
 
         turnoSeleccionado.setEstado("OCUPADO");
         turnoRepository.save(turnoSeleccionado);
@@ -77,7 +114,7 @@ public class ReservaServiceImpl implements ReservaService {
                 .fecha(request.getFecha().trim())
                 .hora(request.getHora().trim())
                 .servicios(request.getServicios())
-                .barberoAsignado(barbero.getNombre())
+                .barberoAsignado(barberoSeleccionado.getNombre())
                 .total(total)
                 .estado("CONFIRMADA")
                 .creadoEn(LocalDateTime.now())
@@ -101,30 +138,7 @@ public class ReservaServiceImpl implements ReservaService {
         }
     }
 
-    private TurnoEntity resolveAvailableSlot(String fecha, String hora) {
-        List<TurnoEntity> turnosDisponibles = turnoRepository.findByFechaAndHoraAndEstado(fecha.trim(), hora.trim(), "DISPONIBLE");
-        if (turnosDisponibles.isEmpty()) {
-            log.warn("Rechazo: no hay turnos disponibles para fecha [{}] y hora [{}]", fecha, hora);
-            throw new BusinessException("E03", "No hay turnos disponibles para la fecha y hora seleccionadas.", HttpStatus.CONFLICT);
-        }
-        return turnosDisponibles.get(0);
-    }
-
-    private BarberoEntity resolveActiveBarber(String barberoNombre) {
-        BarberoEntity barbero = barberoRepository.findByNombreIgnoreCase(barberoNombre)
-                .orElseThrow(() -> {
-                    log.warn("Barbero [{}] no encontrado", barberoNombre);
-                    return new BusinessException("E_BARBERO_NO_ENCONTRADO", "El barbero especificado no existe.", HttpStatus.NOT_FOUND);
-                });
-
-        if (!barbero.isActivo()) {
-            log.warn("Rechazo por barbero inactivo (E03): barbero [{}]", barbero.getNombre());
-            throw new BusinessException("E03", "El barbero asignado no se encuentra disponible actualmente.", HttpStatus.CONFLICT);
-        }
-        return barbero;
-    }
-
-    private void validateBarberSpecialties(BarberoEntity barbero, Collection<String> codigosServicios) {
+    private boolean barberoHasSpecialties(BarberoEntity barbero, Collection<String> codigosServicios) {
         List<String> especialidades = barbero.getEspecialidades() != null ? barbero.getEspecialidades() : List.of();
         for (String codigo : codigosServicios) {
             Optional<ServicioEntity> servicioOpt = servicioRepository.findByCodigo(codigo.trim());
@@ -137,13 +151,10 @@ public class ReservaServiceImpl implements ReservaService {
                             || esp.equalsIgnoreCase(servicio.getCodigo())
                             || esp.equalsIgnoreCase("ALL"));
             if (!matchesSpecialty) {
-                log.warn("Rechazo por especialidad incompatible (E02): barbero [{}] no domina [{}]",
-                        barbero.getNombre(), servicio.getEspecialidadRequerida());
-                throw new BusinessException("E02",
-                        "El barbero seleccionado está libre, pero no tiene la especialidad necesaria para alguno de los servicios solicitados.",
-                        HttpStatus.UNPROCESSABLE_ENTITY);
+                return false;
             }
         }
+        return true;
     }
 
     private double calculateTotalAndValidateCatalog(Collection<String> codigosServicios) {
