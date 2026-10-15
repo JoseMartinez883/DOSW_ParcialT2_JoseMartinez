@@ -690,11 +690,12 @@ Para garantizar la trazabilidad y el aislamiento de cada funcionalidad, cada uno
 | **Pedir un turno** | `feature/pedir-turno` | `feat(reservas): implement reservation request with strict short-circuit validation chain`<br>`test(reservas): add unit tests verifying short-circuit validation and slot occupation` | Merge commit `965f49d` | Fusionada en `develop` y borrada |
 | **Consultar mis reservas** | `feature/consultar-mis-reservas` | `feat(reservas): implement authenticated client reservations retrieval`<br>`test(reservas): add unit tests for client reservations query with descending order` | Merge commit `7bd5ec4` | Fusionada en `develop` y borrada |
 | **Consultar todas las reservas** | `feature/consultar-todas-reservas` | `feat(reservas): implement admin reservations inspection endpoint`<br>`test(reservas): add unit tests for admin reservations auditing` | Merge commit `d9c3dce` | Fusionada en `develop` y borrada |
-| **Consolidación de pruebas y docs** | `develop` | `test(coverage): consolidate persistence mappers and initializer tests reaching 88% JaCoCo coverage`<br>`docs: update README with implementation phase evidences and technical specs` | Directo en `develop` | Ramas consolidadas en `origin/develop` |
+| **Consolidación de pruebas y docs** | `develop` | `test(coverage): consolidate persistence mappers and initializer tests reaching 88% JaCoCo coverage`<br>`feat(domain): complete domain models, persistence mappers, and infrastructure unit tests`<br>`docs: update README with implementation phase evidences and technical specs` | Directo en `develop` | Ramas consolidadas en `origin/develop` |
 
 ### Historial de integración en Git:
 
 ```text
+* 768ed0a feat(domain): complete domain models, persistence mappers, and infrastructure unit tests
 * 9acd504 test(coverage): consolidate persistence mappers and initializer tests reaching 88% JaCoCo coverage
 *   d9c3dce Merge branch 'feature/consultar-todas-reservas' into develop
 |\  
