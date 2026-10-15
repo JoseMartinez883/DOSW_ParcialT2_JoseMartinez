@@ -13,6 +13,8 @@
 9. [Docker](#9-docker)
 10. [CI/CD](#10-cicd)
 11. [Herramientas de modelado y diseño (evidencias)](#11-herramientas-de-modelado-y-diseño-evidencias)
+12. [Fase de diseño — Parte Teórica](#fase-de-diseño--parte-teórica-de-los-requerimientos-a-una-solución-implementable)
+13. [Implementación y evidencias](#implementación-y-evidencias)
 
 ## 1. Datos del estudiante
 
@@ -129,12 +131,12 @@ DOSW_ParcialT2_JoseMartinez/
 
 ## 6. Configuración y variables de entorno
 
-| Variable          | Descripción                                                         | Ejemplo (sin credenciales reales)                                        |
-| ----------------- | -------------------------------------------------------------------- | ------------------------------------------------------------------------ |
-| `MONGODB_URI`   | Cadena de conexión a MongoDB (local o en la nube)                   | `mongodb+srv://user:pass@cluster.mongodb.net/dosw_parcial`             |
-| `JWT_SECRET`    | Clave secreta en Base64 (mínimo 44 caracteres) para firma de tokens | `bXlfc3VwZXJfc2VjcmV0X2tleV9mb3Jfand0X3ZhbGlkYXRpb25fZG9zd18yMDI0Cg==` |
-| `PORT`          | Puerto de escucha HTTP del servidor Spring Boot                      | `8080`                                                                 |
-| `WEBSITES_PORT` | Puerto de enrutamiento interno utilizado por Azure App Service       | `8080`                                                                 |
+| Variable          | Descripción                                                         | Ejemplo (sin credenciales reales)                            |
+| ----------------- | -------------------------------------------------------------------- | ------------------------------------------------------------ |
+| `MONGODB_URI`   | Cadena de conexión a MongoDB (local o en la nube)                   | `mongodb+srv://user:pass@cluster.mongodb.net/dosw_parcial` |
+| `JWT_SECRET`    | Clave secreta en Base64 (mínimo 44 caracteres) para firma de tokens | `<TU_JWT_SECRET_BASE64>`                                   |
+| `PORT`          | Puerto de escucha HTTP del servidor Spring Boot                      | `8080`                                                     |
+| `WEBSITES_PORT` | Puerto de enrutamiento interno utilizado por Azure App Service       | `8080`                                                     |
 
 ## 7. Cómo ejecutar
 
@@ -156,7 +158,9 @@ El servicio quedará disponible en: `http://localhost:8080`
 
 ```powershell
 docker build -t dosw-parcial:local .
-docker run -p 8080:8080 -e JWT_SECRET=bXlfc3VwZXJfc2VjcmV0X2tleV9mb3Jfand0X3ZhbGlkYXRpb25fZG9zd18yMDI0Cg== dosw-parcial:local
+docker run -p 8080:8080 --env-file .env dosw-parcial:local
+# O pasando la variable de entorno de su sesión:
+docker run -p 8080:8080 -e JWT_SECRET dosw-parcial:local
 ```
 
 ### 4. Orquestación completa con Docker Compose (Bono)
@@ -168,9 +172,12 @@ docker compose up --build -d
 ```
 
 Detener los servicios:
+
 ```powershell
 docker compose down
 ```
+
+![Evidencia Docker Compose Stack](docs/images/DockerBono.png)
 
 ## 8. Pruebas
 
@@ -194,7 +201,9 @@ Comandos build y run:
 
 ```powershell
 docker build -t dosw-parcial:local .
-docker run -p 8080:8080 -e JWT_SECRET=bXlfc3VwZXJfc2VjcmV0X2tleV9mb3Jfand0X3ZhbGlkYXRpb25fZG9zd18yMDI0Cg== dosw-parcial:local
+docker run -p 8080:8080 --env-file .env dosw-parcial:local
+# O pasando la variable de entorno de su sesión:
+docker run -p 8080:8080 -e JWT_SECRET dosw-parcial:local
 ```
 
 ### Evidencia de contenedor corriendo en Docker Desktop
@@ -587,37 +596,36 @@ Para finalizar la etapa de diseño, su líder le asigna una reunión con el equi
 
 #### 1. Diagrama de despliegue de la solución
 
-* **Fuente editable en Draw.io:** [Google Drive](https://drive.google.com/file/d/1sYDKYtZpFOvCa8y8ybALDk5QuHJG-ikW/view?usp=sharing)
 * **Vista del diagrama exportado:**
 
 ![Diagrama de Despliegue](docs/uml/DiagramaDespliegue.drawio.png)
 
-**Descripción del diagrama:**  
+**Descripción del diagrama:**
 El diagrama modela la topología física y lógica de la solución Bob's Barber en producción y pruebas. Inicia con el **Dispositivo Desarrollador**, donde se construyen y prueban localmente los componentes con Maven y Java 21, enviando los cambios mediante `git push` al **Repositorio GitHub**.
 
 A través de un webhook, el repositorio dispara el pipeline en el **GitHub Actions Runner** (`ci-cd.yml`), el cual compila con `mvn verify`, empaqueta la imagen Docker inmutable y realiza el `docker push` hacia **Docker Hub Registry** (`josemartinez883/dosw-parcial-t2:latest`).
 
 Desde allí, el pipeline orquesta el despliegue hacia dos ambientes aislados en **Microsoft Azure**:
+
 - **Ambiente QA:** El servicio **Azure App Service QA** descarga la imagen de Docker Hub (`docker pull :latest`) y ejecuta el contenedor con el artefacto `dosw-parcial.jar` en el puerto interno 8080. Se comunica mediante MongoDB Wire Protocol sobre TLS (puerto 27017) con una base de datos dedicada **MongoDB Atlas QA** (`dosw_parcial_qa`), permitiendo realizar pruebas integrales sin comprometer datos reales.
 - **Ambiente PROD:** Tras validación y aprobación, **Azure App Service PROD** despliega el contenedor con la versión productiva en West US 3, conectado a la base de datos **MongoDB Atlas PROD** (`dosw_parcial`) bajo cifrado TLS.
 
 El **Dispositivo Cliente** (consumiendo desde Swagger UI, una SPA web o Postman) interactúa con las APIs expuestas en Azure mediante peticiones seguras sobre **HTTPS / REST** dirigidas al puerto 443, enrutadas internamente al puerto 8080 de cada contenedor.
 
-
 #### 2. Especificación técnica del despliegue
 
-| Elemento | Tipo | Detalle técnico | Rol en la arquitectura |
-|---|---|---|---|
-| **Desarrollador** | Entorno local | Máquina de desarrollo con JDK 21, Maven y Git | Realiza cambios en el código y lanza el comando git push hacia el repositorio remoto. |
-| **Repositorio GitHub** | Servidor de control de versiones | Repositorio remoto con ramas `develop` y `main` | Centraliza el código fuente y dispara automáticamente el webhook del pipeline de CI/CD. |
-| **GitHub Actions** | Servidor de automatización CI/CD | Runner Ubuntu Latest ejecutando `workflows/ci-cd.yml` | Corre la fase de build con `mvn verify`, empaqueta la imagen y orquesta el despliegue a QA y PROD. |
-| **Docker Hub** | Registro de artefactos | Repositorio de imágenes `josemartinez883/dosw-parcial-t2` | Almacena y versiona la imagen de contenedor que consumen los ambientes de Azure. |
-| **Azure App Service QA** | Nodo de ejecución en la nube | Instancia Web App Linux para pruebas de integración | Aloja el contenedor en ambiente de QA para validación continua antes de paso a producción. |
-| **MongoDB Atlas QA** | Nodo de persistencia cloud | Base de datos `dosw_parcial_qa` con Replica Set | Almacena datos de prueba y aislamiento para el ambiente de QA. |
-| **Azure App Service PROD** | Nodo de ejecución en la nube | Instancia Web App Linux productiva en West US 3 | Aloja la versión estable y pública de la API para usuarios y clientes finales. |
-| **MongoDB Atlas PROD** | Nodo de persistencia cloud | Base de datos `dosw_parcial` con Replica Set y TLS | Almacena los registros reales de reservas, turnos, barberos y usuarios. |
-| **Dispositivo Cliente** | Consumidor HTTP | Swagger UI, SPA Web o Postman consumiendo la API | Emite peticiones HTTPS a los endpoints públicos de la barbería. |
-| **Mecanismos de comunicación** | Protocolos y puertos | HTTPS en puerto 443 hacia 8080 y MongoDB Wire Protocol en puerto 27017 | Conexiones cifradas en tránsito en ambos ambientes de la solución. |
+| Elemento                              | Tipo                              | Detalle técnico                                                       | Rol en la arquitectura                                                                               |
+| ------------------------------------- | --------------------------------- | ---------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| **Desarrollador**               | Entorno local                     | Máquina de desarrollo con JDK 21, Maven y Git                         | Realiza cambios en el código y lanza el comando git push hacia el repositorio remoto.               |
+| **Repositorio GitHub**          | Servidor de control de versiones  | Repositorio remoto con ramas `develop` y `main`                    | Centraliza el código fuente y dispara automáticamente el webhook del pipeline de CI/CD.            |
+| **GitHub Actions**              | Servidor de automatización CI/CD | Runner Ubuntu Latest ejecutando `workflows/ci-cd.yml`                | Corre la fase de build con `mvn verify`, empaqueta la imagen y orquesta el despliegue a QA y PROD. |
+| **Docker Hub**                  | Registro de artefactos            | Repositorio de imágenes `josemartinez883/dosw-parcial-t2`           | Almacena y versiona la imagen de contenedor que consumen los ambientes de Azure.                     |
+| **Azure App Service QA**        | Nodo de ejecución en la nube     | Instancia Web App Linux para pruebas de integración                   | Aloja el contenedor en ambiente de QA para validación continua antes de paso a producción.         |
+| **MongoDB Atlas QA**            | Nodo de persistencia cloud        | Base de datos `dosw_parcial_qa` con Replica Set                      | Almacena datos de prueba y aislamiento para el ambiente de QA.                                       |
+| **Azure App Service PROD**      | Nodo de ejecución en la nube     | Instancia Web App Linux productiva en West US 3                        | Aloja la versión estable y pública de la API para usuarios y clientes finales.                     |
+| **MongoDB Atlas PROD**          | Nodo de persistencia cloud        | Base de datos `dosw_parcial` con Replica Set y TLS                   | Almacena los registros reales de reservas, turnos, barberos y usuarios.                              |
+| **Dispositivo Cliente**         | Consumidor HTTP                   | Swagger UI, SPA Web o Postman consumiendo la API                       | Emite peticiones HTTPS a los endpoints públicos de la barbería.                                    |
+| **Mecanismos de comunicación** | Protocolos y puertos              | HTTPS en puerto 443 hacia 8080 y MongoDB Wire Protocol en puerto 27017 | Conexiones cifradas en tránsito en ambos ambientes de la solución.                                 |
 
 ---
 
@@ -668,7 +676,6 @@ Los logs dan visibilidad en tiempo real de lo que ocurre dentro de la aplicació
   - Tiempos de respuesta y duración de consultas pesadas a la base de datos.
   - Códigos de respuesta HTTP y estados de dominio, como `CONFIRMADA` o `CANCELADA`.
   - Identificadores de negocio que no sean datos sensibles, como `reservaId`, `turnoId` o `barberoId`.
-    
 * **Datos sensibles que nunca deben registrarse:**
 
   - Contraseñas en texto plano ni contraseñas con hash.
@@ -690,81 +697,77 @@ Nunca se debe exponer el error técnico interno al cliente porque revelar nombre
 
 ---
 
-# Fase de Implementación — Parte Práctica Consolidación del diseño
+# Implementación y evidencias
 
-## 1. Estrategia de Ramas y Flujo Git
+## 1. Instrucciones de Ejecución, Pruebas y Variables de Entorno
 
-Para garantizar la trazabilidad y el aislamiento de cada funcionalidad, cada uno de los 5 casos de uso fue desarrollado en una rama dedicada bajo el patrón `feature/<caso-de-uso>`, completando su flujo integral (Controlador, DTOs, Mappers, Servicio, Modelo, Repositorio MongoDB y Pruebas Unitarias), antes de integrarse sobre `develop` y eliminar la rama correspondiente:
+### Variables de entorno necesarias (sin valores sensibles):
 
-| Caso de Uso | Rama Feature | Commits Atómicos | Integración en `develop` | Estado de la Rama |
-|---|---|---|---|---|
-| **Iniciar sesión** | `feature/iniciar-sesion` | `feat(auth): implement user authentication with JWT generation and password hashing`<br>`test(auth): add unit tests for authentication flow and JWT validation`<br>`config(security): configure Spring Security filter chain and JWT authentication filter` | Merge commit `b951f3d` | Fusionada en `develop` y borrada |
-| **Crear turno** | `feature/crear-turno` | `feat(turnos): implement slot creation endpoint with barber availability rules`<br>`test(turnos): add unit tests for turno creation validation rules` | Merge commit `6d5b955` | Fusionada en `develop` y borrada |
-| **Pedir un turno** | `feature/pedir-turno` | `feat(reservas): implement reservation request with strict short-circuit validation chain`<br>`test(reservas): add unit tests verifying short-circuit validation and slot occupation` | Merge commit `965f49d` | Fusionada en `develop` y borrada |
-| **Consultar mis reservas** | `feature/consultar-mis-reservas` | `feat(reservas): implement authenticated client reservations retrieval`<br>`test(reservas): add unit tests for client reservations query with descending order` | Merge commit `7bd5ec4` | Fusionada en `develop` y borrada |
-| **Consultar todas las reservas** | `feature/consultar-todas-reservas` | `feat(reservas): implement admin reservations inspection endpoint`<br>`test(reservas): add unit tests for admin reservations auditing` | Merge commit `d9c3dce` | Fusionada en `develop` y borrada |
-| **Ajustes y validaciones de negocio** | `feature/ajustes-pedir-turno` | `feat: Parcial T2 - Update database seeder with official barbers and service catalog`<br>`feat: Parcial T2 - Refactor reservation service with specialty-based barber assignment and official error codes`<br>`feat: Parcial T2 - Support /mis-reservas endpoint in controller and security configuration`<br>`feat: Parcial T2 - Sanitize 500 internal error response in global exception handler` | Merge commit `fab0e43` | Fusionada en `develop` |
-| **Bono Docker Compose** | `feature/bono-docker-compose` | `feat: Parcial T2 - Implement docker compose orchestration and update project documentation for bonus` | Merge commit `1c65dfe` | Fusionada en `develop` |
-| **Consolidación de pruebas y docs** | `develop` | `test(coverage): consolidate persistence mappers and initializer tests reaching 88% JaCoCo coverage`<br>`feat(domain): complete domain models, persistence mappers, and infrastructure unit tests`<br>`docs: update README with implementation phase evidences and technical specs` | Directo en `develop` | Ramas consolidadas en `origin/develop` |
+| Variable          | Descripción                                                         | Ejemplo (sin credenciales reales)                            |
+| ----------------- | -------------------------------------------------------------------- | ------------------------------------------------------------ |
+| `MONGODB_URI`   | Cadena de conexión a MongoDB (local o en la nube)                   | `mongodb+srv://user:pass@cluster.mongodb.net/dosw_parcial` |
+| `JWT_SECRET`    | Clave secreta en Base64 (mínimo 44 caracteres) para firma de tokens | `<TU_JWT_SECRET_BASE64>`                                   |
+| `PORT`          | Puerto de escucha HTTP del servidor Spring Boot                      | `8080`                                                     |
+| `WEBSITES_PORT` | Puerto de enrutamiento interno utilizado por Azure App Service       | `8080`                                                     |
 
-### Historial de integración en Git:
+### Instrucciones para ejecutar la aplicación:
 
-```text
-*   1c65dfe feat: Parcial T2 - Merge feature/bono-docker-compose with Docker orchestration and documentation
-|\  
-| * d5bf681 feat: Parcial T2 - Implement docker compose orchestration and update project documentation for bonus
-|/  
-* 7767d3f feat: Parcial T2 - Remove local drawio file and keep cloud editable reference in documentation
-*   fab0e43 feat: Parcial T2 - Merge feature/ajustes-pedir-turno with business logic and seeder corrections
-|\  
-| * 4a1d256 feat: Parcial T2 - Sanitize 500 internal error response in global exception handler
-| * 463f51f feat: Parcial T2 - Support /mis-reservas endpoint in controller and security configuration
-| * f4e2a70 feat: Parcial T2 - Refactor reservation service with specialty-based barber assignment and official error codes
-| * 5c756ca feat: Parcial T2 - Update database seeder with official barbers and service catalog
-|/  
-* f13c620 refactor(core): apply DDD naming, extract guard methods, and clean unused imports
-* 2731730 docs: finalize Git integration history and atomic commits in README
-* 768ed0a feat(domain): complete domain models, persistence mappers, and infrastructure unit tests
-* 9acd504 test(coverage): consolidate persistence mappers and initializer tests reaching 88% JaCoCo coverage
-*   d9c3dce Merge branch 'feature/consultar-todas-reservas' into develop
-|\  
-| * c6d8f3d test(reservas): add unit tests for admin reservations auditing
-| * ba85622 feat(reservas): implement admin reservations inspection endpoint
-|/  
-*   7bd5ec4 Merge branch 'feature/consultar-mis-reservas' into develop
-|\  
-| * fa2aa40 test(reservas): add unit tests for client reservations query with descending order
-| * 799995e feat(reservas): implement authenticated client reservations retrieval
-|/  
-*   965f49d Merge branch 'feature/pedir-turno' into develop
-|\  
-| * a60fa21 test(reservas): add unit tests verifying short-circuit validation and slot occupation
-| * c7a0e5c feat(reservas): implement reservation request with strict short-circuit validation chain
-|/  
-*   6d5b955 Merge branch 'feature/crear-turno' into develop
-|\  
-| * e292290 test(turnos): add unit tests for turno creation validation rules
-| * afc2896 feat(turnos): implement slot creation endpoint with barber availability rules
-|/  
-*   b951f3d Merge branch 'feature/iniciar-sesion' into develop
-|\  
-| * 0367b44 config(security): configure Spring Security filter chain and JWT authentication filter
-| * f10722b test(auth): add unit tests for authentication flow and JWT validation
-| * 8aa0c82 feat(auth): implement user authentication with JWT generation and password hashing
-|/  
-* 787b5ac Fix formatting issues in README.md
+1. **Opción A — Ejecución local con Maven (requiere MongoDB corriendo):**
+
+   ```powershell
+   # Iniciar MongoDB en Docker si no se dispone de cluster en la nube
+   docker run -d -p 27017:27017 --name mongo-parcial mongo:7
+
+   # Ejecutar la API en local
+   mvn spring-boot:run
+   ```
+
+   El servicio quedará disponible en: `http://localhost:8080`
+2. **Opción B — Orquestación completa con Docker Compose (API + MongoDB):**
+
+   ```powershell
+   # Levantar API y base de datos con volúmenes persistentes en segundo plano
+   docker compose up --build -d
+
+   # Seguir logs de la API en tiempo real
+   docker compose logs -f api
+
+   # Detener los servicios
+   docker compose down
+   ```
+3. **Opción C — Ejecución con Docker individual:**
+
+   ```powershell
+   docker build -t dosw-parcial:local .
+   docker run -p 8080:8080 --env-file .env dosw-parcial:local
+   # O pasando las variables de entorno de la sesión:
+   docker run -p 8080:8080 -e JWT_SECRET -e MONGODB_URI dosw-parcial:local
+   ```
+
+### Instrucciones para ejecutar las pruebas:
+
+```powershell
+# 1. Ejecutar la suite completa de pruebas unitarias (60 tests)
+mvn test
+
+# 2. Ejecutar pruebas y generar el reporte HTML de cobertura JaCoCo
+mvn verify
 ```
+
+El reporte detallado de JaCoCo se genera en: `target/site/jacoco/index.html`.
 
 ---
 
 ## 2. Inyección de Dependencias por Constructor
 
 Siguiendo las mejores prácticas de Spring Framework y los principios de diseño de software limpio:
+
 - Todos los controladores (`AuthController`, `TurnoController`, `ReservaController`) y servicios administrados (`AuthServiceImpl`, `TurnoServiceImpl`, `ReservaServiceImpl`) implementan **inyección de dependencias por constructor explícito**.
 - Todos los colaboradores inyectados se declaran como atributos `private final`, garantizando **inmutabilidad** y evitando estados inconsistentes o dependencias nulas.
 - Esta separación de responsabilidades facilita la instanciación directa de las clases en las pruebas unitarias con mocks (`Mockito`), eliminando la necesidad de levantar el contexto pesado de Spring Boot.
 
 Ejemplo en [`TurnoServiceImpl.java`](src/main/java/edu/dosw/parcial/core/services/TurnoServiceImpl.java):
+
 ```java
 @Slf4j
 @Service
@@ -791,21 +794,27 @@ public class TurnoServiceImpl implements TurnoService {
 
 ---
 
-## 3. Implementación de los 5 Casos de Uso (Flujo Completo)
+## 3. Evidencias de las pruebas funcionales y sus logs asociados
 
-Cada caso de uso implementa el ciclo de vida completo: validación sintáctica de DTOs con Bean Validation (`@Valid`), enrutamiento REST con Spring Security, reglas de negocio en la capa Core y persistencia en MongoDB.
+Cada caso de uso implementa el ciclo de vida completo: validación sintáctica de DTOs con Bean Validation (`@Valid`), enrutamiento REST con Spring Security, reglas de negocio en la capa Core, persistencia en MongoDB y emisión de logs estructurados con SLF4J:
 
 ### 1. Iniciar sesión (`POST /api/v1/auth/login`)
+
 - **Acceso:** Público (sin token).
 - **Entrada:** `LoginRequest` (`correo`, `password`).
 - **Lógica:** Valida la existencia del usuario en `UsuarioRepository` y comprueba la contraseña cifrada mediante `BCryptPasswordEncoder`. Al autenticar exitosamente, genera un token JWT firmado (JJWT) que encapsula el correo y el rol (`CLIENTE` o `ADMIN`).
 - **Respuesta:** `200 OK` con `LoginResponse` (`token`, `rol`).
 - **Errores:** `401 Unauthorized` si las credenciales son incorrectas o el usuario no existe.
 
+#### Evidencia de ejecución funcional y log asociado:
+
+![Log Evidencia Login](docs/images/LogEvidenceLogin.png)
+
 ### 2. Crear turno (`POST /api/v1/turnos`)
+
 - **Acceso:** Protegido con rol `ADMIN` (`@PreAuthorize("hasRole('ADMIN')")`).
 - **Entrada:** `CrearTurnoRequest` (`barberoNombre`, `fecha: YYYY-MM-DD`, `hora: HH:mm`).
-- **Lógica:** 
+- **Lógica:**
   1. Valida que el barbero exista en MongoDB (`barberoRepository.findByNombreIgnoreCase`).
   2. Valida que la fecha sea futura (`LocalDate.parse(fecha).isAfter(hoy)`).
   3. Valida que la fecha caiga en un día laboral del barbero (`diasDisponibles`) y la hora dentro de su horario de atención (`horaInicio - horaFin`).
@@ -814,7 +823,12 @@ Cada caso de uso implementa el ciclo de vida completo: validación sintáctica d
 - **Respuesta:** `201 Created` con `TurnoResponse` (`id`, `barberoNombre`, `fecha`, `hora`, `estado`).
 - **Errores:** `400 Bad Request` (formato inválido de fecha/hora), `404 Not Found` (barbero no existe), `409 Conflict` (turno duplicado), `422 Unprocessable Entity` (fecha no futura o fuera del horario/días del barbero).
 
+#### Evidencia de ejecución funcional y log asociado:
+
+![Log Evidencia Crear Turno](docs/images/LogEvidenceTurno.png)
+
 ### 3. Pedir un turno (`POST /api/v1/reservas`)
+
 - **Acceso:** Protegido para clientes autenticados con rol `CLIENTE` (`@PreAuthorize("hasRole('CLIENTE')")`).
 - **Entrada:** `PedirTurnoRequest` con objeto `cliente: {nombre, telefono, correo}`, `fecha: YYYY-MM-DD`, `hora: HH:mm` y lista de `servicios: ["SER-001"]`.
 - **Cadena de validaciones en orden estricto (Short-Circuit):**
@@ -833,19 +847,33 @@ Cada caso de uso implementa el ciclo de vida completo: validación sintáctica d
      - Se persiste la nueva reserva con estado `CONFIRMADA`, calculando el total como la sumatoria de los precios oficiales del catálogo.
 - **Respuesta:** `201 Created` con `ReservaResponse` (`idReserva`, `barberoAsignado`, `total`, `estado: "CONFIRMADA"`).
 
+#### Evidencia de ejecución funcional y log asociado:
+
+![Log Evidencia Crear Reserva](docs/images/LogEvidenceCrearReserva.png)
+
 ### 4. Consultar mis reservas (`GET /api/v1/reservas/me` o `GET /api/v1/reservas/mis-reservas`)
+
 - **Acceso:** Protegido para clientes autenticados (`CLIENTE`).
 - **Lógica:** Extrae la identidad del usuario a partir del token JWT autenticado (`SecurityContextHolder`), busca sus reservas en `ReservaRepository` ordenadas por fecha/hora de manera descendente y las mapea al DTO de salida `MisReservasResponse`.
 - **Respuesta:** `200 OK` con lista de `MisReservasResponse`.
 
+#### Evidencia de ejecución funcional y log asociado:
+
+![Log Evidencia Mis Reservas](docs/images/LogEvidenceVerReservasUsuario.png)
+
 ### 5. Consultar todas las reservas (`GET /api/v1/reservas`)
+
 - **Acceso:** Protegido exclusivamente para rol `ADMIN` (`@PreAuthorize("hasRole('ADMIN')")`).
 - **Lógica:** Consulta la totalidad de reservas registradas en el sistema para auditoría y gestión de la barbería, ordenadas por fecha/hora de manera descendente.
 - **Respuesta:** `200 OK` con lista completa de `TodasReservasResponse`.
 
+#### Evidencia de ejecución funcional y log asociado:
+
+![Log Evidencia Todas las Reservas Admin](docs/images/LogEvidenceVerTodasLasReservasAdmin.png)
+
 ---
 
-## 4. Documentación con Swagger y OpenAPI 3
+## 4. Enlaces de acceso a la aplicación y a su documentación Swagger
 
 La API cuenta con documentación viva generada mediante `springdoc-openapi-starter-webmvc-ui:2.5.0` y configurada en [`OpenApiConfig.java`](src/main/java/edu/dosw/parcial/config/OpenApiConfig.java):
 
@@ -854,8 +882,13 @@ La API cuenta con documentación viva generada mediante `springdoc-openapi-start
 - **Endpoints documentados:** Todos los 5 casos de uso cuentan con descripciones detalladas, códigos de respuesta HTTP (`200`, `201`, `400`, `401`, `403`, `404`, `409`, `422`) y ejemplos de esquemas JSON de entrada y salida.
 
 **Enlaces Swagger en producción:**
+
 - **Swagger UI:** https://dosw-parcial-josemartinez-f4hwgudtgwcqgdb8.westus3-01.azurewebsites.net/swagger-ui/index.html
 - **OpenAPI JSON Spec:** https://dosw-parcial-josemartinez-f4hwgudtgwcqgdb8.westus3-01.azurewebsites.net/v3/api-docs
+
+### Evidencia de interfaz Swagger UI interactiva:
+
+![Evidencia Swagger](docs/images/EvidenceSwagger.png)
 
 ---
 
@@ -863,42 +896,87 @@ La API cuenta con documentación viva generada mediante `springdoc-openapi-start
 
 El backend utiliza `@Slf4j` (SLF4J + Logback) con segregación estructurada de niveles de severidad en todas las capas:
 
-| Nivel | Cuándo se utiliza | Ejemplo en el código |
-|---|---|---|
-| `INFO` | Inicio de operaciones clave, recepción de peticiones en controladores, confirmación de reservas y turnos, inicios de sesión válidos. | `log.info("Reserva creada y confirmada exitosamente: id=[{}], barbero=[{}], total=[{}]", ...)` |
-| `WARN` | Rechazos de reglas de negocio esperadas y controladas (franja llena E01, especialidad no coincidente E02, barbero inactivo E100, credenciales inválidas). | `log.warn("Rechazo por franja llena (E01): [{}] reservas activas en fecha [{}]", ...)` |
-| `ERROR` | Excepciones no controladas o fallas de infraestructura en `GlobalExceptionHandler`. | `log.error("Excepción inesperada en el servidor: ", ex)` |
+| Nivel     | Cuándo se utiliza                                                                                                                                         | Ejemplo en el código                                                                            |
+| --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `INFO`  | Inicio de operaciones clave, recepción de peticiones en controladores, confirmación de reservas y turnos, inicios de sesión válidos.                   | `log.info("Reserva creada y confirmada exitosamente: id=[{}], barbero=[{}], total=[{}]", ...)` |
+| `WARN`  | Rechazos de reglas de negocio esperadas y controladas (franja llena E01, especialidad no coincidente E02, barbero inactivo E100, credenciales inválidas). | `log.warn("Rechazo por franja llena (E01): [{}] reservas activas en fecha [{}]", ...)`         |
+| `ERROR` | Excepciones no controladas o fallas de infraestructura en `GlobalExceptionHandler`.                                                                      | `log.error("Excepción inesperada en el servidor: ", ex)`                                      |
 
-> [!SECURITY]
+> [!SECURITY] Security
 > **Protección de Datos Sensibles:** Ningún registro de log imprime contraseñas en texto plano, hashes de claves ni tokens JWT completos, cumpliendo con los estándares de privacidad y seguridad de la información.
 
 ---
 
-## 6. Pruebas Unitarias y Cobertura (JUnit 5 + Mockito)
+## 6. Pruebas Unitarias, Cobertura con JaCoCo y Análisis Estático
 
 Las pruebas unitarias fueron construidas bajo el patrón **Arrange, Act, Assert (AAA)**, cubriendo controladores, servicios centrales de lógica de negocio, generadores de tokens JWT y mappers de persistencia:
 
 ### Resumen de Pruebas:
-- **Total de pruebas ejecutadas:** 43 tests
+
+- **Total de pruebas ejecutadas:** 60 tests
 - **Fallos (Failures):** 0
 - **Errores:** 0
-- **Tiempo de ejecución:** ~4.5 segundos
-
-```text
-[INFO] Results:
-[INFO] 
-[INFO] Tests run: 43, Failures: 0, Errors: 0, Skipped: 0
-[INFO] 
-[INFO] BUILD SUCCESS
-```
+- **Tiempo de ejecución:** ~5.0 segundos
 
 ### Cobertura de Código JaCoCo:
-- **Cobertura de Instrucciones (Instruction Coverage):** **87.74%**
-- **Servicios Principales (`core.services`):** **97.60%** de cobertura de instrucciones.
-  - `ReservaServiceImpl`: **97.6%** de cobertura de instrucciones (incluye asignación de barberos por especialidad).
-  - `AuthServiceImpl`: **100%** de cobertura de instrucciones.
-  - `TurnoServiceImpl`: **94.0%** de cobertura de instrucciones.
+
+- **Cobertura de Instrucciones (Instruction Coverage):** **88.64%** (2334 de 2633 instrucciones cubiertas)
+- **Servicios Principales (`core.services`):** **97.8%** de cobertura de instrucciones.
+  - `ReservaServiceImpl`: **97.6%** de cobertura (incluye asignación de barberos por especialidad y short-circuit).
+  - `AuthServiceImpl`: **100%** de cobertura.
+  - `TurnoServiceImpl`: **97.0%** de cobertura (incluye validación de franja horaria que no desborda la jornada).
+  - `ClienteValidator` (`core.validators`): **100%** de cobertura de instrucciones.
+  - `DateUtil` (`core.utils`): **100%** de cobertura de instrucciones y ramas.
   - Mappers y Validadores: **100%** de cobertura.
+
+### Reporte de Análisis Estático de Código (SonarQube / Calidad y Seguridad):
+
+Se configuró el plugin oficial `sonar-maven-plugin:3.10.0.2594` en el archivo `pom.xml` para evaluar la calidad estática, seguridad y deuda técnica sobre todo el código fuente del proyecto (`edu.dosw.parcial`):
+
+| Métrica de Severidad                                       | Resultado |          Evaluación          |
+| ----------------------------------------------------------- | :--------: | :---------------------------: |
+| **Vulnerabilidades de Seguridad (Vulnerabilities)**   |   `0`   | ✅ Superado (Calificación A) |
+| **Puntos Críticos de Seguridad (Security Hotspots)** |   `0`   | ✅ Superado (100% revisados) |
+| **Errores de Confiabilidad (Bugs)**                   |   `0`   | ✅ Superado (Calificación A) |
+| **Deuda Técnica / Code Smells Críticos**            |   `0`   | ✅ Superado (Calificación A) |
+| **Duplicación de Código**                           | `< 1.5%` |          ✅ Óptimo          |
+
+#### Aspectos de Diseño y Seguridad Certificados:
+
+- **Desacoplamiento de Secretos:** Ausencia de contraseñas, secretos o API keys en el código fuente; resolución segura en tiempo de ejecución mediante la variable de entorno `${JWT_SECRET}`.
+- **Inyección Limpia por Constructor:** Inmutabilidad garantizada con atributos `private final` en controladores y servicios administrados, eliminando por completo el uso de `@Autowired` en atributos.
+- **Manejo Seguro de Excepciones:** `GlobalExceptionHandler` captura de manera centralizada y sanitiza los mensajes hacia los clientes, previniendo fuga de información técnica o stack traces.
+
+### Capturas o enlaces a los reportes de JaCoCo y análisis estático:
+
+#### 1. Ejecución de pruebas unitarias exitosas (60 tests en verde):
+
+![Resultado mvn test](docs/images/MvnTestGreen.png)
+
+#### 2. Reporte de cobertura de código JaCoCo (88.64%):
+
+![Reporte JaCoCo](docs/images/JacocoEvidenceFinal.png)
+
+#### 3. Reporte de análisis estático de código (SonarQube):
+
+* **Vista general del Dashboard (Quality Gate: Passed):**
+
+![Overview SonarQube Passed](docs/images/SonarQubeFinalEvidence.png)
+
+* **Detalle de incidencias (Issues) analizadas:**
+
+![Issues SonarQube](docs/images/SonarQubeIssuesFinal.png)
+
+* **Justificación técnica del análisis estático:**
+
+  * **Estado General:** **Passed** en Quality Gate con calificación **A** en Seguridad (Security), Confiabilidad (Reliability) y Mantenibilidad (Maintainability).
+  * **Cobertura (Coverage):** **85.1%** de cobertura en líneas de código, superando el umbral mínimo del 80% exigido por la rúbrica del parcial.
+  * **Explicación del único issue restante (`INFO`):**
+
+    * **Archivo:** [`JwtTokenProvider.java`](src/main/java/edu/dosw/parcial/core/security/JwtTokenProvider.java)
+    * **Regla:** *Use the "java.time" API for date and time* (`java:S2143`).
+    * **Severidad:** **Info** (severidad mínima meramente informativa; **0** Blocker, **0** High, **0** Medium, **0** Low).
+    * **Causa y Justificación:** Toda la lógica de tiempo del componente opera con la API moderna `java.time.Instant.now(Clock.systemUTC())`. Sin embargo, la biblioteca externa JJWT (`io.jsonwebtoken` v0.12.3) define en sus métodos `issuedAt(Date)` y `expiration(Date)` el uso estricto de `java.util.Date`. Por tanto, la llamada a `Date.from(now)` es un requisito del contrato de dicha librería externa y no un defecto de la aplicación ni un hallazgo de severidad.
 
 ---
 
@@ -906,27 +984,40 @@ Las pruebas unitarias fueron construidas bajo el patrón **Arrange, Act, Assert 
 
 El flujo de entrega continua está automatizado mediante GitHub Actions en [`.github/workflows/ci-cd.yml`](.github/workflows/ci-cd.yml) y se ejecuta con cada integración en la rama `develop`:
 
-1. **Job `test`:** Descarga el código, levanta Java 21 LTS y ejecuta `mvn verify`, validando compilación, suite completa de 42 pruebas unitarias y generación de reportes JaCoCo.
+1. **Job `test`:** Descarga el código, levanta Java 21 LTS y ejecuta `mvn verify`, validando compilación, suite completa de 60 pruebas unitarias y generación de reportes JaCoCo.
 2. **Job `docker`:** Depende de `test`. Construye la imagen de contenedor Docker inmutable multietapa y realiza el push a Docker Hub (`josemartinez883/dosw-parcial-t2:latest`).
 3. **Job `deploy`:** Depende de `docker`. Autentica contra Microsoft Azure mediante Service Principal y despliega el contenedor en el recurso de Azure App Service.
 
 ### Enlaces y Evidencias de Producción:
+
 - **URL Base en Producción (Azure App Service):** https://dosw-parcial-josemartinez-f4hwgudtgwcqgdb8.westus3-01.azurewebsites.net
 - **Health Check en Vivo:** https://dosw-parcial-josemartinez-f4hwgudtgwcqgdb8.westus3-01.azurewebsites.net/api/v1/health
 - **Swagger UI en Vivo:** https://dosw-parcial-josemartinez-f4hwgudtgwcqgdb8.westus3-01.azurewebsites.net/swagger-ui/index.html
-- **Repositorio GitHub:** https://github.com/JoseMartinez883/DOSW_ParcialT2_JoseMartinez
+- **Enlace Evidence PipeLine** [github.com/JoseMartinez883/DOSW_ParcialT2_JoseMartinez/actions/runs/38683976403](https://github.com/JoseMartinez883/DOSW_ParcialT2_JoseMartinez/actions/runs/38683976403)
+
+### Evidencias de Pipeline y Despliegue en Azure:
+
+![Pipeline CI/CD en verde](docs/images/EvidencePipeLineGreen.png)
+
+![Evidencia Health](docs/images/HealthEvidence.png)
+
+![Evidencia Azure App Service en ejecución](docs/images/AzureMongoWorks.png)
+
+![Evidencia Azure Cosmos DB for MongoDB](docs/images/AzureWorks.png)
 
 ---
 
-## 8. Bono: Orquestación Local con Docker Compose
+## 8. Bono: Orquestación Local con Docker Compose que levanta API + MongoDB local.
 
 Para cumplir con el bono del parcial y garantizar portabilidad total sin dependencias instaladas en la máquina host, se proporciona el archivo [`docker-compose.yml`](docker-compose.yml) y la plantilla de variables de entorno [`.env.example`](.env.example).
 
 ### Servicios Orquestados:
+
 1. **`api` (`bobs-barber-api`):** Servicio backend Spring Boot empaquetado mediante build multietapa (Maven 3.9 + Temurin 21 JRE). Expone el puerto `8080:8080` y se conecta automáticamente a la red interna `bobs-barber-net`.
 2. **`mongodb` (`bobs-barber-mongodb`):** Base de datos NoSQL oficial `mongo:7` exponiendo el puerto `27017:27017` con volumen dedicado `mongo-data` para persistencia continua y comprobación de salud (`healthcheck` vía `mongosh ping`).
 
 ### Comandos de Ejecución:
+
 ```powershell
 # 1. Levantar el stack completo en segundo plano (con reconstrucción de imagen)
 docker compose up --build -d
@@ -945,11 +1036,14 @@ docker compose down -v
 ```
 
 ### Credenciales Sembradas para Pruebas:
+
 Al iniciar, `DatabaseSeeder` puebla automáticamente la base de datos con usuarios y datos oficiales:
+
 * **Administrador (`ADMIN`):** `admin@gmail.com` / `password123`
 * **Cliente (`CLIENTE`):** `juan@gmail.com` / `password123`
 
 ### Catálogo de Barberos y Servicios Oficiales Disponibles:
+
 * **Barberos:**
   * **Miguel:** Lun–Jue (10:00–17:00) — Especialidades: `CORTE`, `CORTE CON BARBA`.
   * **Laura:** Lun–Vie (10:00–17:00) — Especialidades: `CAPILAR`, `CEJAS`.
@@ -961,4 +1055,6 @@ Al iniciar, `DatabaseSeeder` puebla automáticamente la base de datos con usuari
   * `SER-004`: Afeitado con navaja — $20.000 — Especialidad: `BARBA`
   * `SER-005`: Tratamiento capilar — $45.000 — Especialidad: `CAPILAR`
 
+### Evidencia de Stack Orquestado con Docker Compose (API + MongoDB):
 
+![Contenedor corriendo en Docker](docs/images/DockerBono.png)
