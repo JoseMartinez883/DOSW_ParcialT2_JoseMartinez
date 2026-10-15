@@ -74,38 +74,61 @@ public class DatabaseSeeder implements CommandLineRunner {
         if (!barberoRepository.existsByNombreIgnoreCase("Miguel")) {
             BarberoEntity miguel = BarberoEntity.builder()
                     .nombre("Miguel")
-                    .especialidades(List.of("SER-001", "SER-002", "CORTE", "BARBA"))
-                    .diasDisponibles(List.of("MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"))
-                    .horaInicio("08:00")
-                    .horaFin("20:00")
+                    .especialidades(List.of("CORTE", "CORTE CON BARBA", "SER-001", "SER-002"))
+                    .diasDisponibles(List.of("MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY"))
+                    .horaInicio("10:00")
+                    .horaFin("17:00")
                     .activo(true)
                     .build();
             barberoRepository.save(miguel);
-            log.info("Barbero predeterminado Miguel creado con especialidades y horario completo");
+            log.info("Barbero Miguel creado: Lunes a Jueves 10:00 - 17:00 (CORTE, CORTE CON BARBA)");
+        }
+
+        if (!barberoRepository.existsByNombreIgnoreCase("Laura")) {
+            BarberoEntity laura = BarberoEntity.builder()
+                    .nombre("Laura")
+                    .especialidades(List.of("CAPILAR", "CEJAS", "SER-003", "SER-005"))
+                    .diasDisponibles(List.of("MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY"))
+                    .horaInicio("10:00")
+                    .horaFin("17:00")
+                    .activo(true)
+                    .build();
+            barberoRepository.save(laura);
+            log.info("Barbero Laura creada: Lunes a Viernes 10:00 - 17:00 (CAPILAR, CEJAS)");
+        }
+
+        if (!barberoRepository.existsByNombreIgnoreCase("Andrés") && !barberoRepository.existsByNombreIgnoreCase("Andres")) {
+            BarberoEntity andres = BarberoEntity.builder()
+                    .nombre("Andrés")
+                    .especialidades(List.of("CORTE", "BARBA", "SER-001", "SER-004"))
+                    .diasDisponibles(List.of("TUESDAY", "THURSDAY", "SATURDAY", "SUNDAY"))
+                    .horaInicio("10:00")
+                    .horaFin("14:00")
+                    .activo(true)
+                    .build();
+            barberoRepository.save(andres);
+            log.info("Barbero Andrés creado: Martes, Jueves y Fines de Semana 10:00 - 14:00 (CORTE, BARBA)");
         }
     }
 
     private void seedDefaultCatalog() {
-        if (!servicioRepository.existsByCodigo("SER-001")) {
-            ServicioEntity ser1 = ServicioEntity.builder()
-                    .codigo("SER-001")
-                    .nombre("Corte Clásico")
-                    .precio(25000.0)
-                    .especialidadRequerida("CORTE")
-                    .build();
-            servicioRepository.save(ser1);
-            log.info("Servicio SER-001 creado");
-        }
+        seedServiceIfAbsent("SER-001", "Corte clásico", 25000.0, "CORTE");
+        seedServiceIfAbsent("SER-002", "Corte + barba", 38000.0, "CORTE CON BARBA");
+        seedServiceIfAbsent("SER-003", "Diseño de cejas", 15000.0, "CEJAS");
+        seedServiceIfAbsent("SER-004", "Afeitado con navaja", 20000.0, "BARBA");
+        seedServiceIfAbsent("SER-005", "Tratamiento capilar", 45000.0, "CAPILAR");
+    }
 
-        if (!servicioRepository.existsByCodigo("SER-002")) {
-            ServicioEntity ser2 = ServicioEntity.builder()
-                    .codigo("SER-002")
-                    .nombre("Corte y Barba")
-                    .precio(35000.0)
-                    .especialidadRequerida("BARBA")
+    private void seedServiceIfAbsent(String codigo, String nombre, double precio, String especialidadRequerida) {
+        if (!servicioRepository.existsByCodigo(codigo)) {
+            ServicioEntity servicio = ServicioEntity.builder()
+                    .codigo(codigo)
+                    .nombre(nombre)
+                    .precio(precio)
+                    .especialidadRequerida(especialidadRequerida)
                     .build();
-            servicioRepository.save(ser2);
-            log.info("Servicio SER-002 creado");
+            servicioRepository.save(servicio);
+            log.info("Servicio {} [{}] creado: ${}", codigo, nombre, precio);
         }
     }
 }
