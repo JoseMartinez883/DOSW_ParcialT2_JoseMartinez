@@ -3,7 +3,6 @@ package edu.dosw.parcial.config;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import edu.dosw.parcial.controller.dtos.response.ErrorResponse;
 import jakarta.servlet.http.HttpServletResponse;
-import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;

@@ -3,8 +3,8 @@ package edu.dosw.parcial.core;
 import edu.dosw.parcial.controller.dtos.request.LoginRequest;
 import edu.dosw.parcial.controller.dtos.response.LoginResponse;
 import edu.dosw.parcial.core.models.exception.BusinessException;
+import edu.dosw.parcial.core.security.JwtTokenProvider;
 import edu.dosw.parcial.core.services.AuthServiceImpl;
-import edu.dosw.parcial.core.utils.JwtUtil;
 import edu.dosw.parcial.persistence.entities.UsuarioEntity;
 import edu.dosw.parcial.persistence.repositories.UsuarioRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -37,7 +37,7 @@ class AuthServiceImplTest {
     private PasswordEncoder passwordEncoder;
 
     @Mock
-    private JwtUtil jwtUtil;
+    private JwtTokenProvider jwtTokenProvider;
 
     @InjectMocks
     private AuthServiceImpl authService;
@@ -64,52 +64,45 @@ class AuthServiceImplTest {
     @Test
     @DisplayName("Debe autenticar correctamente y retornar token JWT con el rol")
     void login_Success_ReturnsTokenAndRole() {
-        // Arrange
         when(usuarioRepository.findByCorreo("admin@gmail.com")).thenReturn(Optional.of(sampleUser));
         when(passwordEncoder.matches("password123", "hashed_pwd")).thenReturn(true);
-        when(jwtUtil.generateToken("admin@gmail.com", "ADMIN")).thenReturn("mocked.jwt.token");
+        when(jwtTokenProvider.generateToken("admin@gmail.com", "ADMIN")).thenReturn("mocked.jwt.token");
 
-        // Act
         LoginResponse response = authService.login(validRequest);
 
-        // Assert
         assertNotNull(response);
         assertEquals("mocked.jwt.token", response.getToken());
         assertEquals("ADMIN", response.getRol());
         verify(usuarioRepository).findByCorreo("admin@gmail.com");
         verify(passwordEncoder).matches("password123", "hashed_pwd");
-        verify(jwtUtil).generateToken("admin@gmail.com", "ADMIN");
+        verify(jwtTokenProvider).generateToken("admin@gmail.com", "ADMIN");
     }
 
     @Test
     @DisplayName("Debe lanzar excepción 401 si el usuario no existe en la base de datos")
     void login_UserNotFound_ThrowsBusinessException() {
-        // Arrange
         when(usuarioRepository.findByCorreo("admin@gmail.com")).thenReturn(Optional.empty());
 
-        // Act & Assert
         BusinessException exception = assertThrows(BusinessException.class, () -> authService.login(validRequest));
 
         assertEquals("E_CREDENCIALES_INVALIDAS", exception.getCodigo());
         assertEquals("Correo o contraseña incorrectos.", exception.getMessage());
         assertEquals(HttpStatus.UNAUTHORIZED, exception.getStatus());
         verify(passwordEncoder, never()).matches(anyString(), anyString());
-        verify(jwtUtil, never()).generateToken(anyString(), anyString());
+        verify(jwtTokenProvider, never()).generateToken(anyString(), anyString());
     }
 
     @Test
     @DisplayName("Debe lanzar excepción 401 si la contraseña es incorrecta")
     void login_InvalidPassword_ThrowsBusinessException() {
-        // Arrange
         when(usuarioRepository.findByCorreo("admin@gmail.com")).thenReturn(Optional.of(sampleUser));
         when(passwordEncoder.matches("password123", "hashed_pwd")).thenReturn(false);
 
-        // Act & Assert
         BusinessException exception = assertThrows(BusinessException.class, () -> authService.login(validRequest));
 
         assertEquals("E_CREDENCIALES_INVALIDAS", exception.getCodigo());
         assertEquals("Correo o contraseña incorrectos.", exception.getMessage());
         assertEquals(HttpStatus.UNAUTHORIZED, exception.getStatus());
-        verify(jwtUtil, never()).generateToken(anyString(), anyString());
+        verify(jwtTokenProvider, never()).generateToken(anyString(), anyString());
     }
 }

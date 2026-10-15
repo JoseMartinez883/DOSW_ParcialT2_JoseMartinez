@@ -1,4 +1,4 @@
-package edu.dosw.parcial.core.utils;
+package edu.dosw.parcial.core.security;
 
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
@@ -15,12 +15,12 @@ import java.util.Date;
 
 @Slf4j
 @Component
-public class JwtUtil {
+public class JwtTokenProvider {
 
     private final SecretKey secretKey;
     private final long expirationMs;
 
-    public JwtUtil(
+    public JwtTokenProvider(
             @Value("${jwt.secret:bXlfc3VwZXJfc2VjcmV0X2tleV9mb3Jfand0X3ZhbGlkYXRpb25fZG9zd18yMDI0Cg==}") String secret,
             @Value("${jwt.expiration-ms:3600000}") long expirationMs) {
         this.secretKey = getSigningKey(secret);
@@ -38,7 +38,7 @@ public class JwtUtil {
         }
         byte[] keyBytes = secret.getBytes(StandardCharsets.UTF_8);
         if (keyBytes.length < 32) {
-            // Ensure 256 bits minimum for HMAC-SHA256
+            // HMAC-SHA256 requires at least 256 bits (32 bytes) of key material
             byte[] padded = new byte[32];
             System.arraycopy(keyBytes, 0, padded, 0, Math.min(keyBytes.length, 32));
             return Keys.hmacShaKeyFor(padded);

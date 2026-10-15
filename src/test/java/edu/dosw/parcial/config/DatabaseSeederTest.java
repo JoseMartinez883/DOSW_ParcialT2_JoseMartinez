@@ -13,11 +13,12 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
-class DataInitializerTest {
+class DatabaseSeederTest {
 
     @Mock
     private UsuarioRepository usuarioRepository;
@@ -32,12 +33,11 @@ class DataInitializerTest {
     private PasswordEncoder passwordEncoder;
 
     @InjectMocks
-    private DataInitializer dataInitializer;
+    private DatabaseSeeder databaseSeeder;
 
     @Test
     @DisplayName("Debe inicializar usuarios, barbero y servicios si no existen en BD")
     void run_InitializesData() {
-        // Arrange
         when(usuarioRepository.existsByCorreo("admin@gmail.com")).thenReturn(false);
         when(usuarioRepository.existsByCorreo("juan@gmail.com")).thenReturn(false);
         when(barberoRepository.existsByNombreIgnoreCase("Miguel")).thenReturn(false);
@@ -45,12 +45,10 @@ class DataInitializerTest {
         when(servicioRepository.existsByCodigo("SER-002")).thenReturn(false);
         when(passwordEncoder.encode(anyString())).thenReturn("hashed_pwd");
 
-        // Act
-        dataInitializer.run();
+        databaseSeeder.run();
 
-        // Assert
-        org.mockito.Mockito.verify(usuarioRepository, org.mockito.Mockito.times(2)).save(any());
-        org.mockito.Mockito.verify(barberoRepository, org.mockito.Mockito.times(1)).save(any());
-        org.mockito.Mockito.verify(servicioRepository, org.mockito.Mockito.times(2)).save(any());
+        verify(usuarioRepository, times(2)).save(any());
+        verify(barberoRepository, times(1)).save(any());
+        verify(servicioRepository, times(2)).save(any());
     }
 }

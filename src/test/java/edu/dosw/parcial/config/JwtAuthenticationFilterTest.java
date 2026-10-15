@@ -1,6 +1,6 @@
 package edu.dosw.parcial.config;
 
-import edu.dosw.parcial.core.utils.JwtUtil;
+import edu.dosw.parcial.core.security.JwtTokenProvider;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -27,7 +27,7 @@ import static org.mockito.Mockito.when;
 class JwtAuthenticationFilterTest {
 
     @Mock
-    private JwtUtil jwtUtil;
+    private JwtTokenProvider jwtTokenProvider;
 
     @InjectMocks
     private JwtAuthenticationFilter filter;
@@ -40,20 +40,17 @@ class JwtAuthenticationFilterTest {
     @Test
     @DisplayName("Debe autenticar al usuario si el token Bearer es válido")
     void doFilterInternal_ValidToken_AuthenticatesUser() throws ServletException, IOException {
-        // Arrange
         HttpServletRequest request = mock(HttpServletRequest.class);
         HttpServletResponse response = mock(HttpServletResponse.class);
         FilterChain filterChain = mock(FilterChain.class);
 
         when(request.getHeader("Authorization")).thenReturn("Bearer valid.token");
-        when(jwtUtil.validateToken("valid.token")).thenReturn(true);
-        when(jwtUtil.extractCorreo("valid.token")).thenReturn("admin@gmail.com");
-        when(jwtUtil.extractRol("valid.token")).thenReturn("ADMIN");
+        when(jwtTokenProvider.validateToken("valid.token")).thenReturn(true);
+        when(jwtTokenProvider.extractCorreo("valid.token")).thenReturn("admin@gmail.com");
+        when(jwtTokenProvider.extractRol("valid.token")).thenReturn("ADMIN");
 
-        // Act
         filter.doFilterInternal(request, response, filterChain);
 
-        // Assert
         assertNotNull(SecurityContextHolder.getContext().getAuthentication());
         assertEquals("admin@gmail.com", SecurityContextHolder.getContext().getAuthentication().getPrincipal());
         verify(filterChain).doFilter(request, response);
@@ -62,17 +59,14 @@ class JwtAuthenticationFilterTest {
     @Test
     @DisplayName("No debe autenticar si no hay cabecera Authorization")
     void doFilterInternal_NoHeader_PassesThrough() throws ServletException, IOException {
-        // Arrange
         HttpServletRequest request = mock(HttpServletRequest.class);
         HttpServletResponse response = mock(HttpServletResponse.class);
         FilterChain filterChain = mock(FilterChain.class);
 
         when(request.getHeader("Authorization")).thenReturn(null);
 
-        // Act
         filter.doFilterInternal(request, response, filterChain);
 
-        // Assert
         assertNull(SecurityContextHolder.getContext().getAuthentication());
         verify(filterChain).doFilter(request, response);
     }

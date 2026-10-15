@@ -11,7 +11,6 @@ import edu.dosw.parcial.persistence.entities.TurnoEntity;
 import edu.dosw.parcial.persistence.mappers.TurnoPersistenceMapper;
 import edu.dosw.parcial.persistence.repositories.BarberoRepository;
 import edu.dosw.parcial.persistence.repositories.TurnoRepository;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -19,7 +18,7 @@ import org.springframework.stereotype.Service;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.format.DateTimeParseException;
-import java.util.List;
+import java.util.Collection;
 
 @Slf4j
 @Service
@@ -46,12 +45,36 @@ public class TurnoServiceImpl implements TurnoService {
         log.info("Iniciando creación de turno para barbero [{}] en fecha [{}] y hora [{}]",
                 request.getBarberoNombre(), request.getFecha(), request.getHora());
 
-        // 1. Validación de formato de fecha y ser futura
+        LocalDate date = validateFutureDate(request.getFecha());
+        LocalTime time = validateTimeFormat(request.getHora());
+        BarberoEntity barbero = findBarber(request.getBarberoNombre());
+
+        validateBarberSchedule(barbero, date, time);
+        validateSlotUniqueness(barbero.getNombre(), request.getFecha(), request.getHora());
+
+        Turno nuevoTurno = Turno.builder()
+                .barberoNombre(barbero.getNombre())
+                .fecha(request.getFecha().trim())
+                .hora(request.getHora().trim())
+                .estado(EstadoTurno.DISPONIBLE)
+                .build();
+
+        TurnoEntity entityToSave = turnoPersistenceMapper.toEntity(nuevoTurno);
+        TurnoEntity savedEntity = turnoRepository.save(entityToSave);
+        Turno turnoGuardado = turnoPersistenceMapper.toDomain(savedEntity);
+
+        log.info("Turno creado satisfactoriamente: id=[{}], barbero=[{}], fecha=[{}], hora=[{}], estado=[{}]",
+                turnoGuardado.getId(), turnoGuardado.getBarberoNombre(), turnoGuardado.getFecha(), turnoGuardado.getHora(), turnoGuardado.getEstado());
+
+        return turnoDtoMapper.toResponse(turnoGuardado);
+    }
+
+    private LocalDate validateFutureDate(String rawDate) {
         LocalDate date;
         try {
-            date = LocalDate.parse(request.getFecha().trim());
+            date = LocalDate.parse(rawDate.trim());
         } catch (DateTimeParseException e) {
-            log.warn("Formato de fecha inválido: [{}]", request.getFecha());
+            log.warn("Formato de fecha inválido: [{}]", rawDate);
             throw new BusinessException("E_FORMATO_FECHA", "La fecha debe tener un formato válido y ser futura.", HttpStatus.BAD_REQUEST);
         }
 
@@ -59,26 +82,29 @@ public class TurnoServiceImpl implements TurnoService {
             log.warn("La fecha [{}] no es futura con respecto a hoy [{}]", date, LocalDate.now());
             throw new BusinessException("E_FORMATO_FECHA", "La fecha debe tener un formato válido y ser futura.", HttpStatus.BAD_REQUEST);
         }
+        return date;
+    }
 
-        // 2. Validación de formato de hora
-        LocalTime time;
+    private LocalTime validateTimeFormat(String rawTime) {
         try {
-            time = LocalTime.parse(request.getHora().trim());
+            return LocalTime.parse(rawTime.trim());
         } catch (DateTimeParseException e) {
-            log.warn("Formato de hora inválido: [{}]", request.getHora());
+            log.warn("Formato de hora inválido: [{}]", rawTime);
             throw new BusinessException("E_FORMATO_HORA", "La hora debe tener un formato válido (HH:mm).", HttpStatus.BAD_REQUEST);
         }
+    }
 
-        // 3. Validación de existencia del barbero
-        BarberoEntity barbero = barberoRepository.findByNombreIgnoreCase(request.getBarberoNombre().trim())
+    private BarberoEntity findBarber(String rawBarberoNombre) {
+        return barberoRepository.findByNombreIgnoreCase(rawBarberoNombre.trim())
                 .orElseThrow(() -> {
-                    log.warn("Barbero [{}] no existe en la base de datos", request.getBarberoNombre());
+                    log.warn("Barbero [{}] no existe en la base de datos", rawBarberoNombre);
                     return new BusinessException("E_BARBERO_NO_ENCONTRADO", "El barbero especificado no existe.", HttpStatus.NOT_FOUND);
                 });
+    }
 
-        // 4. Validación de día y horario de atención del barbero
+    private void validateBarberSchedule(BarberoEntity barbero, LocalDate date, LocalTime time) {
         String dayOfWeek = date.getDayOfWeek().name();
-        List<String> diasDisponibles = barbero.getDiasDisponibles();
+        Collection<String> diasDisponibles = barbero.getDiasDisponibles();
         if (diasDisponibles != null && !diasDisponibles.isEmpty()) {
             boolean diaValido = diasDisponibles.stream()
                     .anyMatch(d -> d.equalsIgnoreCase(dayOfWeek) || d.equalsIgnoreCase("ALL"));
@@ -96,28 +122,12 @@ public class TurnoServiceImpl implements TurnoService {
                 throw new BusinessException("E_FUERA_DE_HORARIO", "La fecha u hora no se encuentra dentro de la disponibilidad del barbero.", HttpStatus.UNPROCESSABLE_ENTITY);
             }
         }
+    }
 
-        // 5. Validación de turno no duplicado (barbero + fecha + hora)
-        if (turnoRepository.existsByBarberoNombreIgnoreCaseAndFechaAndHora(barbero.getNombre(), request.getFecha().trim(), request.getHora().trim())) {
-            log.warn("Turno duplicado para barbero [{}] en fecha [{}] y hora [{}]", barbero.getNombre(), request.getFecha(), request.getHora());
+    private void validateSlotUniqueness(String barberoNombre, String fecha, String hora) {
+        if (turnoRepository.existsByBarberoNombreIgnoreCaseAndFechaAndHora(barberoNombre, fecha.trim(), hora.trim())) {
+            log.warn("Turno duplicado para barbero [{}] en fecha [{}] y hora [{}]", barberoNombre, fecha, hora);
             throw new BusinessException("E_TURNO_DUPLICADO", "No se duplica barbero + fecha + hora.", HttpStatus.CONFLICT);
         }
-
-        // 6. Creación y persistencia del turno (nace DISPONIBLE)
-        Turno nuevoTurno = Turno.builder()
-                .barberoNombre(barbero.getNombre())
-                .fecha(request.getFecha().trim())
-                .hora(request.getHora().trim())
-                .estado(EstadoTurno.DISPONIBLE)
-                .build();
-
-        TurnoEntity entityToSave = turnoPersistenceMapper.toEntity(nuevoTurno);
-        TurnoEntity savedEntity = turnoRepository.save(entityToSave);
-        Turno turnoGuardado = turnoPersistenceMapper.toDomain(savedEntity);
-
-        log.info("Turno creado satisfactoriamente: id=[{}], barbero=[{}], fecha=[{}], hora=[{}], estado=[{}]",
-                turnoGuardado.getId(), turnoGuardado.getBarberoNombre(), turnoGuardado.getFecha(), turnoGuardado.getHora(), turnoGuardado.getEstado());
-
-        return turnoDtoMapper.toResponse(turnoGuardado);
     }
 }

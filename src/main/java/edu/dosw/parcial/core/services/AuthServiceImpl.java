@@ -3,10 +3,9 @@ package edu.dosw.parcial.core.services;
 import edu.dosw.parcial.controller.dtos.request.LoginRequest;
 import edu.dosw.parcial.controller.dtos.response.LoginResponse;
 import edu.dosw.parcial.core.models.exception.BusinessException;
-import edu.dosw.parcial.core.utils.JwtUtil;
+import edu.dosw.parcial.core.security.JwtTokenProvider;
 import edu.dosw.parcial.persistence.entities.UsuarioEntity;
 import edu.dosw.parcial.persistence.repositories.UsuarioRepository;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -18,12 +17,15 @@ public class AuthServiceImpl implements AuthService {
 
     private final UsuarioRepository usuarioRepository;
     private final PasswordEncoder passwordEncoder;
-    private final JwtUtil jwtUtil;
+    private final JwtTokenProvider jwtTokenProvider;
 
-    public AuthServiceImpl(UsuarioRepository usuarioRepository, PasswordEncoder passwordEncoder, JwtUtil jwtUtil) {
+    public AuthServiceImpl(
+            UsuarioRepository usuarioRepository,
+            PasswordEncoder passwordEncoder,
+            JwtTokenProvider jwtTokenProvider) {
         this.usuarioRepository = usuarioRepository;
         this.passwordEncoder = passwordEncoder;
-        this.jwtUtil = jwtUtil;
+        this.jwtTokenProvider = jwtTokenProvider;
     }
 
     @Override
@@ -41,7 +43,7 @@ public class AuthServiceImpl implements AuthService {
             throw new BusinessException("E_CREDENCIALES_INVALIDAS", "Correo o contraseña incorrectos.", HttpStatus.UNAUTHORIZED);
         }
 
-        String token = jwtUtil.generateToken(usuario.getCorreo(), usuario.getRol());
+        String token = jwtTokenProvider.generateToken(usuario.getCorreo(), usuario.getRol());
         log.info("Inicio de sesión exitoso para usuario [{}] con rol [{}]", usuario.getCorreo(), usuario.getRol());
 
         return LoginResponse.builder()

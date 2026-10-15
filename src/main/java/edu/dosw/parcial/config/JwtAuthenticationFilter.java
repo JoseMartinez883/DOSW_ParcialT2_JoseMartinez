@@ -1,11 +1,10 @@
 package edu.dosw.parcial.config;
 
-import edu.dosw.parcial.core.utils.JwtUtil;
+import edu.dosw.parcial.core.security.JwtTokenProvider;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -21,10 +20,10 @@ import java.util.Collections;
 @Component
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
-    private final JwtUtil jwtUtil;
+    private final JwtTokenProvider jwtTokenProvider;
 
-    public JwtAuthenticationFilter(JwtUtil jwtUtil) {
-        this.jwtUtil = jwtUtil;
+    public JwtAuthenticationFilter(JwtTokenProvider jwtTokenProvider) {
+        this.jwtTokenProvider = jwtTokenProvider;
     }
 
     @Override
@@ -34,9 +33,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
         if (StringUtils.hasText(authHeader) && authHeader.startsWith("Bearer ")) {
             String token = authHeader.substring(7).trim();
-            if (jwtUtil.validateToken(token)) {
-                String correo = jwtUtil.extractCorreo(token);
-                String rol = jwtUtil.extractRol(token);
+            if (jwtTokenProvider.validateToken(token)) {
+                String correo = jwtTokenProvider.extractCorreo(token);
+                String rol = jwtTokenProvider.extractRol(token);
 
                 if (correo != null && rol != null && SecurityContextHolder.getContext().getAuthentication() == null) {
                     SimpleGrantedAuthority authority = new SimpleGrantedAuthority("ROLE_" + rol);
